@@ -1,0 +1,34 @@
+# Ignore node_modules (JavaScript dependencies)
+node_modules/
+
+# Ignore Python bytecode files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore virtual environment folders
+venv/
+env/
+
+# Ignore Docker-related files
+.docker/
+docker-compose.override.yml
+Dockerfile.*
+
+# Ignore .ply files
+*.ply
+
+# Ignore log files
+*.log
+
+# Ignore IDE/editor settings (e.g., Visual Studio Code)
+.vscode/
+.idea/
+
+# Ignore system files
+.DS_Store
+Thumbs.db
+
+# Keep empty folders
+!*/
