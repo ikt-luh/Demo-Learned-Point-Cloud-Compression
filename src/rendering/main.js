@@ -11,7 +11,7 @@ const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerH
 const renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(VRButton.createButton(renderer));
-renderer.xr.enabled = true;
+renderer.xr.enabled = false;
 document.body.appendChild(renderer.domElement);
 
 // Initialize Controls
@@ -19,54 +19,92 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(512, 512, 512); // Set default target
 controls.update();
 
-// List of .ply file URLs
-const plyFiles = [
-    'test_data/redandblack_vox10_1450.ply',
-    'test_data/redandblack_vox10_1451.ply',
-    'test_data/redandblack_vox10_1452.ply',
-];
+// Define start frame and number of frames
+const startFrame = 1480; // Example start frame
+const numFrames = 60; // Example number of frames to include
+const filePrefix = 'test_data/redandblack_vox10_';
+const fileSuffix = '.ply';
+
+// Dynamically generate file names based on the range
+const plyFiles = Array.from({ length: numFrames }, (_, i) => `${filePrefix}${startFrame + i}${fileSuffix}`);
+
 
 const loader = new PLYLoader();
+const models = []; // Array to hold preloaded models
 let currentModel = null;
 let currentIndex = 0;
+let direction = 1
 
-function loadNextModel() {
-    if (currentModel) {
-        scene.remove(currentModel); // Remove the previous model
-    }
+// Preload all models
+function preloadModels() {
+    plyFiles.forEach((file, index) => {
+        loader.load(
+            file,
+            (geometry) => {
+                const material = new THREE.PointsMaterial({
+                    size: 5.0,
+                    vertexColors: true 
+                });
+                const points = new THREE.Points(geometry, material);
+                models.push(points);
 
-    loader.load(
-        plyFiles[currentIndex],
-        (geometry) => {
-            const material = new THREE.PointsMaterial({
-                size: 2.0,
-                vertexColors: true 
-            });
-
-            currentModel = new THREE.Points(geometry, material);
-            scene.add(currentModel);
-
-            // Advance to the next model or loop back to the first
-            currentIndex = (currentIndex + 1) % plyFiles.length;
-            //setTimeout(loadNextModel, 5000);
-        },
-        (xhr) => {
-            console.log(`Loading ${plyFiles[currentIndex]}: ${(xhr.loaded / xhr.total) * 100}% loaded`);
-        },
-        (error) => {
-            console.error(`Error loading ${plyFiles[currentIndex]}:`, error);
-        }
-    );
+                // Add the first model to the scene initially
+                if (index === 0) {
+                    currentModel = points;
+                    scene.add(points);
+                }
+            },
+            (xhr) => {
+                console.log(`Loading ${file}: ${(xhr.loaded / xhr.total) * 100}% loaded`);
+            },
+            (error) => {
+                console.error(`Error loading ${file}:`, error);
+            }
+        );
+    });
 }
 
-// Start Loading Models
-loadNextModel();
+function switchModel() {
+    if (models.length === 0) return; // Ensure models are preloaded
+
+    // Remove the current model
+    if (currentModel) {
+        scene.remove(currentModel);
+    }
+
+    // Update index based on the current direction
+    currentIndex += direction;
+
+    // If at the end of the list, reverse the direction
+    if (currentIndex > models.length) {
+        currentIndex = models.length - 1; // Stay within bounds
+        direction = -1; // Switch to backward
+    }
+    // If at the start of the list, reverse the direction
+    else if (currentIndex < 0) {
+        currentIndex = 0; // Stay within bounds
+        direction = 1; // Switch to forward
+    }
+
+    // Set the new current model and add it to the scene
+    currentModel = models[currentIndex];
+    scene.add(currentModel);
+}
 
 // Animate and Render Scene
 function animate() {
-    requestAnimationFrame(animate);
+    renderer.setAnimationLoop(() => {
+        // Switch the model every 1/30th of a second (30 FPS)
+        const frameDuration = 1000 / 30; // 30 FPS = ~33ms per frame
 
-    renderer.render(scene, camera);
+        setTimeout(() => {
+            switchModel();
+        }, frameDuration);
+
+        renderer.render(scene, camera);
+    });
 }
 
-renderer.setAnimationLoop(animate);
+// Start Preloading Models and Animation
+preloadModels();
+animate();
