@@ -1,19 +1,27 @@
+import pickle
 import zmq
-import pyrealsense2 as rs
+#import pyrealsense2 as rs
+import pyzed.sl as sl
+import numpy as np
+import time
+import open3d as o3d
 
 
 class Capturer():
-    def __init__(self, camera="realsense"):
+    def __init__(self, camera="zed"):
         """
+        Constructor
         """
         self.camera = camera
         self.decimate = 0
+        self.depth_clip = -1.0
+        self.voxel_size = 0.002
 
+        # Camera setup
         if self.camera == "realsense":
             self.setup_realsense()
-        else:
-            pass
-
+        elif self.camera == "zed":
+            self.setup_zed()
         # ZMQ
         context = zmq.Context()
         self.socket = context.socket(zmq.PUSH)
@@ -25,20 +33,17 @@ class Capturer():
             # Grab the point cloud
             if self.camera == "realsense":
                 pointcloud = self.get_realsense_frames()
-            else: 
+            elif self.camera == "zed": 
                 pointcloud = self.get_zed_frames()
 
             # Serialize it
             serialized_data = self.serialize_pointcloud(pointcloud)
 
             # Send it
-            socket.send(serialized_data)
+            self.socket.send(serialized_data)
 
     def setup_realsense(self):
         device_list = rs.device_list()
-        print(device_list)
-        for dev in device_list:
-            print(dev)
 
         self.pipe = rs.pipeline()
         config = rs.config()
@@ -97,13 +102,68 @@ class Capturer():
                 }
         return data
 
+    def setup_zed(self):
+        """
+        """
+        init = sl.InitParameters(depth_mode=sl.DEPTH_MODE.ULTRA,
+                coordinate_units=sl.UNIT.METER,
+                coordinate_system=sl.COORDINATE_SYSTEM.RIGHT_HANDED_Y_UP)
+        init.camera_resolution = sl.RESOLUTION.HD1080
+
+        self.res = sl.Resolution()
+        self.res.width = 960
+        self.res.height = 540
+
+        self.zed = sl.Camera()
+        status = self.zed.open(init)
+        if status != sl.ERROR_CODE.SUCCESS:
+            print(repr(status))
+            exit()
+
+        camera_model = self.zed.get_camera_information().camera_model
+
+        self.pointcloud = sl.Mat(self.res.width, self.res.height, sl.MAT_TYPE.F32_C4, sl.MEM.CPU)
+
     def get_zed_frames(self):
-        #TODO
-        return None
+        """
+        Grab a frame from a ZED Camera and computes the Point Cloud
+        """
+        if self.zed.grab() == sl.ERROR_CODE.SUCCESS:
+            t0 = time.time()
+            self.zed.retrieve_measure(self.pointcloud, sl.MEASURE.XYZRGBA, sl.MEM.CPU, self.res)
+
+            # Get Point Cloud from frame
+            data = self.pointcloud.numpy()
+            points = data[:,:,:3].reshape(-1, 3)
+
+            # Color processing
+            float_colors = data[:,:,3].reshape(-1, 1)
+            int_colors = float_colors.view(np.uint32)
+            colors = np.stack([((int_colors >> (8 * i)) & 0xFF) for i in range(3)], axis=-1).reshape(-1, 3)
+
+            # Remove invalid points (e.g., NaN or extreme values)
+            valid_mask = np.isfinite(points).all(axis=1) & (points[:, 2] >= self.depth_clip)
+            points = points[valid_mask]
+            colors = colors[valid_mask] 
+
+            # Voxelize
+            o3d_pointcloud = o3d.geometry.PointCloud()
+            o3d_pointcloud.points = o3d.utility.Vector3dVector(points.astype(np.float64))  # Open3D uses float64 for points
+            o3d_pointcloud.colors = o3d.utility.Vector3dVector(colors.astype(np.float64)/255.0)  # Colors need to be in range [0, 1]
+
+            # Downsample the point cloud using voxel size
+            downsampled_pointcloud = o3d_pointcloud.voxel_down_sample(self.voxel_size)
+            points = np.asarray(downsampled_pointcloud.points)
+            colors = np.asarray(downsampled_pointcloud.colors)
+            points = np.round(points / self.voxel_size).astype(np.int16)
+            print(np.min(points), np.max(points))
+
+            data = { "points": points, "colors": colors, "timestamp": t0 }
+        return data
 
     def serialize_pointcloud(self, data):
-        #TODO
-        return data
+        #return msgpack.packb(data, use_bin_type=True)
+        return pickle.dumps(data)
 
 
 if __name__ == "__main__":

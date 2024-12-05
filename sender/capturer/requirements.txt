@@ -1,3 +1,4 @@
 pyzmq
 numpy
-pyrealsense2
+msgpack
+open3d

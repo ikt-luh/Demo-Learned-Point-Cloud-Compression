@@ -1,3 +1,6 @@
+import numpy
+import pickle
+import time
 import zmq
 
 class Server():
@@ -11,7 +14,14 @@ class Server():
     def run(self):
         while True:
             serialized_data = self.pull_socket.recv()
+            data = self.deserialize_data(serialized_data)
             print("Got some data")
+            print(time.time() - data["timestamp"])
+            print(data["points"].shape)
+
+    def deserialize_data(self, data):
+        #return msgpack.unpackb(data, raw=False)
+        return pickle.loads(data)
 
 if __name__ == "__main__":
     server = Server()
