@@ -1,0 +1,48 @@
+version: '3.8'
+services:
+  capturer:
+    build:
+      context: ./capturer
+    container_name: capturer
+    runtime: nvidia
+    privileged: true
+    devices:
+      - /dev/bus/usb:/dev/bus/usb  # Access the camera device
+    device_cgroup_rules:
+      - 'c 81:* rmw'
+      - 'c 189:* rmw'
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - ZMQ_SOCKET="tcp://encoder:5555"
+    networks:
+      - sender_network
+
+  encoder:
+    build:
+      context: ./encoder
+    container_name: encoder
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - ZMQ_PULL_SOCKET="tcp://capturer:5555"
+      - ZMQ_PUSH_SOCKET="tcp://media_server:5556"
+    networks:
+      - sender_network
+
+  media_server:
+    build:
+      context: ./media_server
+    container_name: media_server
+    ports:
+      - "8080:8080"
+      - "5556:5556"
+    environment:
+      - ZMQ_PULL_SOCKET="tcp://encoder:5556"
+    networks:
+      - sender_network
+
+networks:
+  sender_network:
+    driver: bridge

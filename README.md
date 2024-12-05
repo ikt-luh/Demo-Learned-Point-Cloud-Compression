@@ -4,6 +4,15 @@
 ## Installation
 
 
+## JETSON Building
+### Sender
+```
+cd sender
+docker-compose up --build
+```
+
+### Receiver 
+
 ## Usage
 ### Rendering 
 
