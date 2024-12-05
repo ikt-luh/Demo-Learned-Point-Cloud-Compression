@@ -10,7 +10,7 @@ class Encoder():
         self.pull_socket.bind("tcp://*:5555")
 
         self.push_socket = context.socket(zmq.PUSH)
-        self.push_socket.bind("tcp://media_server:5556")
+        self.push_socket.bind("tcp://mediaserver:5556")
 
 
     def run(self):

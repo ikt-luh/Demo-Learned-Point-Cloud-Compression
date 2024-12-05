@@ -27,14 +27,14 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
       - ZMQ_PULL_SOCKET="tcp://capturer:5555"
-      - ZMQ_PUSH_SOCKET="tcp://media_server:5556"
+      - ZMQ_PUSH_SOCKET="tcp://mediaserver:5556"
     networks:
       - sender_network
 
-  media_server:
+  mediaserver:
     build:
       context: ./media_server
-    container_name: media_server
+    container_name: mediaserver
     ports:
       - "8080:8080"
       - "5556:5556"
