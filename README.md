@@ -1,5 +1,12 @@
 # Demo for Unified Compression
 
+## Hardware
+This demo requires the following Hardware:
+- 2 Jetson AGX Orin developer kits
+- 1 Occulus Quest 2 VR Headset + Link Cable
+- 1 ZED2i Stereo Camera 
+
+Cables and peripherals.
 
 ## Project Structure 
 The project is structured as follows
@@ -23,15 +30,42 @@ The project is structured as follows
 
 ## Installation
 
+For setup, collect the required dependencies:
+```
+	# TODO
+```
 
-## JETSON Building
+
 ### Sender
+On the sender device, make sure a ZED Camera is plugged in, then run
 ```
 cd sender
 docker-compose up --build
 ```
 
 ### Receiver 
+On the receiver side, we need to connect the Occulus Quest 2 before running:
+
+First, check if the headset is accesible via adb:
+```
+adb devices
+```
+
+If it is, use reverse port forwarding to make the browser accesible
+```
+adb reverse tcp:5173 tcp:5173
+adb reverse tcp:8765 tcp:8765
+adb reverse tcp:8765 tcp:8765
+```
+
+Finally, starting the server:
+```
+cd receiver
+docker-compose up --build
+```
+
+
+The visualization should now be available via https://localhost:5173/ on the receiver device **and** via the Occulus Headset 
 
 ## Usage
 ### Rendering 
