@@ -3,6 +3,7 @@
 
 ## Project Structure 
 The project is structured as follows
+```
     .
     ├── sender                   # Sender modules
     |	├── capturer             
@@ -18,6 +19,8 @@ The project is structured as follows
     ├── dependencies             # Dependencies
     ├── LICENSE
     └── README.md
+```
+
 ## Installation
 
 
