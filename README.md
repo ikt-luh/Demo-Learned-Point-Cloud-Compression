@@ -1,6 +1,23 @@
 # Demo for Unified Compression
 
 
+## Project Structure 
+The project is structured as follows
+    .
+    ├── sender                   # Sender modules
+    |	├── capturer             
+    |	├── encoder             
+    |	├── mediaserver             
+    |	└── docker-compose.yaml
+    ├── receiver                 # Receiver modules
+    |	├── client             
+    |	├── decoder             
+    |	├── visualization             
+    |	└── docker-compose.yaml
+    ├── shared                   # Shared modules
+    ├── dependencies             # Dependencies
+    ├── LICENSE
+    └── README.md
 ## Installation
 
 

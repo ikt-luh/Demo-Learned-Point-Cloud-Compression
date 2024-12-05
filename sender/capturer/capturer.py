@@ -156,7 +156,6 @@ class Capturer():
             points = np.asarray(downsampled_pointcloud.points)
             colors = np.asarray(downsampled_pointcloud.colors)
             points = np.round(points / self.voxel_size).astype(np.int16)
-            print(np.min(points), np.max(points))
 
             data = { "points": points, "colors": colors, "timestamp": t0 }
         return data
