@@ -1,4 +1,5 @@
 pyzmq
+pyyaml
 numpy
 msgpack
 tqdm==4.65.0
@@ -10,3 +11,5 @@ compressai==1.2.4
 pandas==2.0.2
 requests==2.31.0
 numpy==1.26.4
+open3d
+bitstream

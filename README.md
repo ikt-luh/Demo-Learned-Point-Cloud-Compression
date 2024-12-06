@@ -32,7 +32,8 @@ The project is structured as follows
 
 For setup, collect the required dependencies:
 ```
-	# TODO
+	mkdir dependencies && cd dependencies
+	git clone git@gitlab.uni-hannover.de:ve-intern/research/unified-compression.git
 ```
 
 

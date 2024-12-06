@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean
 
 # Install Python dependencies
+RUN pip3 install --ignore-installed --no-cache-dir blinker
 COPY requirements.txt /app/requirements.txt
 RUN pip3 install --no-cache-dir -r /app/requirements.txt
 
@@ -27,6 +28,7 @@ RUN python3 setup.py install --force_cuda --blas=openblas
 # Copy application code
 COPY . /app
 WORKDIR /app
+ENV PYTHONPATH=/app
 
 # Ensure the container uses GPU
 ENV NVIDIA_VISIBLE_DEVICES all
