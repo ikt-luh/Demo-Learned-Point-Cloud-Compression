@@ -2,16 +2,14 @@ import time
 import os
 import zmq
 import pickle
-import threading
 from server import HTTPServerHandler
 from mpd_manager import MPDManager
 
 class StreamingServer:
-    def __init__(self, output_directory="./media", zmq_address="tcp://*:5556", port=8080):
+    def __init__(self, output_directory="./", zmq_address="tcp://*:5556", port=8080):
         # Setup directories and MPD Manager
         self.output_directory = output_directory
         os.makedirs(self.output_directory, exist_ok=True)
-        print(self.output_directory)
 
         self.mpd_manager = MPDManager(self.output_directory)
         self.mpd_manager.setup_adaptation_set()
@@ -46,7 +44,6 @@ class StreamingServer:
         segment_path = os.path.join(self.output_directory, f"segment-{self.segment_index}.bin")
         with open(segment_path, "wb") as f:
             pickle.dump(data, f)
-            print(segment_path)
 
         # Update MPD and save it
         self.mpd_manager.update_mpd(self.segment_index, bandwidth=999)
@@ -62,11 +59,13 @@ class StreamingServer:
 
 if __name__ == "__main__":
     # Initialize server
+    output_directory = "./"
     zmq_address = "tcp://*:5556"
     port = 8080
 
-    server = StreamingServer(zmq_address=zmq_address, port=port)
+    server = StreamingServer(output_directory=output_directory, zmq_address=zmq_address, port=port)
 
+    import threading
     threading.Thread(target=server.start_http_server, daemon=True).start()
 
     # Start streaming server
