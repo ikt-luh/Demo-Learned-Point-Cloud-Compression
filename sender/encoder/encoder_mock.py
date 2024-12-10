@@ -8,7 +8,7 @@ import numpy as np
 import torch
 
 class Encoder:
-    def __init__(self, max_queue_size=60, target_fps=3, gop_size=3, segment_length=2.0):
+    def __init__(self, max_queue_size=60, target_fps=3, gop_size=3, segment_duration=2.0):
         context = zmq.Context()
 
         # ZeroMQ
@@ -24,7 +24,7 @@ class Encoder:
         # GoP and Framerate Handling
         self.target_fps = target_fps
         self.gop_size = gop_size
-        self.segment_length = segment_length
+        self.segment_duration = segment_duration
 
         # Thread-safe queue for batches
         self.batch_queue = queue.Queue()
@@ -48,9 +48,9 @@ class Encoder:
                 start_time_stamp = time_stamp
 
             # Calculate current segment length
-            curr_segment_length = time_stamp - start_time_stamp
+            curr_segment_duration = time_stamp - start_time_stamp
 
-            if curr_segment_length <= self.segment_length:
+            if curr_segment_duration <= self.segment_duration:
                 # Add to batch if within the segment
                 batch.append(data)
             else:
@@ -58,7 +58,7 @@ class Encoder:
                 self.batch_queue.put(batch)
 
                 # Reset batch and adjust start time
-                start_time_stamp += self.segment_length  # Ensure fixed intervals
+                start_time_stamp += self.segment_duration  # Ensure fixed intervals
                 batch = [data]
 
     def worker(self):
@@ -94,8 +94,8 @@ class Encoder:
         """
         timestamps = [item["timestamp"] for item in batch]
         start_time = timestamps[0]
-        n = int(self.segment_length * self.target_fps)  # Total number of frames to sample
-        step = self.segment_length / n
+        n = int(self.segment_duration * self.target_fps)  # Total number of frames to sample
+        step = self.segment_duration / n
 
         target_timestamps = [start_time + i * step for i in range(n)]
 
@@ -104,16 +104,20 @@ class Encoder:
             closest_frame = min(batch, key=lambda item: abs(item["timestamp"] - target))
             sampled_batch.append(closest_frame)
 
-        print(sampled_batch[0]["timestamp"])
-        print(sampled_batch[-1]["timestamp"])
-        print("")
         return sampled_batch
 
     def compress(self, sampled_batch):
         """
         Mock compression function. Currently, just returns the input.
         """
-        return sampled_batch  # Replace with actual compression logic
+        data = {}
+        data["timestamp"] = sampled_batch[0]["timestamp"]
+        data["segment_duration"] = self.segment_duration
+        data["frame_rate"] = self.target_fps
+        for i in range(3):
+            data[i] = "AbCd" * 1000 * (i+1)
+
+        return data  # Replace with actual compression logic
 
     def serialize_data(self, data):
         """

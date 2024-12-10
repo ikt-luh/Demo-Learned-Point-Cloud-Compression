@@ -2,6 +2,7 @@ import os
 from lxml import etree
 import time
 
+
 class MPDManager:
     def __init__(self, output_directory):
         self.output_directory = output_directory
@@ -21,42 +22,68 @@ class MPDManager:
         )
         self.period = etree.SubElement(self.mpd_root, "Period", id="P0", start="PT0s")
         self.adaptation_set = None
+        self.representations = {}  # Store representations dynamically
+        self.initialized = False
 
     def setup_adaptation_set(self):
         self.adaptation_set = etree.SubElement(
-            self.period, "AdaptationSet", contentType="pointcloud", maxFrameRate="30"
+            self.period,
+            "AdaptationSet",
+            mimeType="pointcloud/custom",
+            contentType="pointcloud",
+            maxFrameRate="30",
+            subsegmentAlignment="true",
+            subsegmentStartsWithSAP="1",
         )
-        etree.SubElement(self.adaptation_set, "Role", schemeIDUri="urn:mpeg:dash:role:2011", value="main")
         etree.SubElement(
             self.adaptation_set,
             "SegmentTemplate",
-            timescale="1000000",
-            duration="2002000",
-            availabilityTimeOffset="1.969",
-            availabilityTimeComplete="false",
-            initialization="chunk-stream-$RepresentationID$/init-$RepresentationID$.m4s",
-            media="chunk-stream-$RepresentationID$/$Number%05d$.m4s",
+            duration="120",
+            timescale="30",
+            media="ID$RepresentationID$/segment-$Number$.bin",
             startNumber="1",
-        )
-        etree.SubElement(
-            self.adaptation_set,
-            "Representation",
-            id="1",
-            mimeType="pointcloud/custom",
-            codecs="unified",
-            bandwidth="999",
+            initialization="$RepresentationID$/$RepresentationID$_0.m4s",
         )
 
-    def update_mpd(self, segment_index, bandwidth):
+    def add_representation(self, rep_id, mime_type, codecs, bandwidth):
+        if rep_id in self.representations:
+            return  # Avoid duplicate representations
+
+        representation = etree.SubElement(
+            self.adaptation_set,
+            "Representation",
+            id=str(rep_id),
+            mimeType=mime_type,
+            codecs=codecs,
+            bandwidth=str(bandwidth),
+        )
+        self.representations[rep_id] = {"element": representation, "segments": []}
+
+        # Create the correct folder structure for initialization files
+        init_path = os.path.join(self.output_directory, f"ID{rep_id}/init_{rep_id}.m4s")
+        os.makedirs(os.path.dirname(init_path), exist_ok=True)
+        with open(init_path, "wb") as init_file:
+            init_file.write(b"")  # Placeholder for initialization data
+
+    def update_segment(self, rep_id, segment_number, segment_path, bandwidth):
+        if rep_id not in self.representations:
+            raise ValueError(f"Representation {rep_id} not found.")
+
+        # Update bandwidth dynamically
+        representation_element = self.representations[rep_id]["element"]
+        representation_element.set("bandwidth", str(bandwidth))
+
+        # Track segment information
+        self.representations[rep_id]["segments"].append((segment_number, segment_path))
+
+    def update_metadata(self):
+        # Update MPD publish time
         self.mpd_root.set(
             "publishTime", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         )
-        self.adaptation_set.find("./SegmentTemplate").set("startNumber", str(segment_index))
-        self.adaptation_set.find("./Representation").set("bandwidth", str(bandwidth))
 
     def save_mpd(self):
         mpd_path = os.path.join(self.output_directory, "manifest.mpd")
         mpd_content = etree.tostring(self.mpd_root, pretty_print=True, xml_declaration=True, encoding="UTF-8")
         with open(mpd_path, "wb") as f:
             f.write(mpd_content)
-

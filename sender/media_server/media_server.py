@@ -28,39 +28,49 @@ class StreamingServer:
         HTTPServerHandler.start(directory=self.output_directory, port=self.port)
 
     def run(self):
-        print("Starting Streaming Server...")
         while True:
             # Receive data from ZeroMQ
             serialized_data = self.pull_socket.recv()
             data = self.deserialize_data(serialized_data)
 
-            print("Received data:")
             print(f"Timestamp delta: {time.time() - data['timestamp']}")
-            print(f"Point shape: {data['points'].shape}")
 
             # Handle data (save to disk, update MPD, etc.)
             self.handle_data(data)
 
     def handle_data(self, data):
-        # Example: Save the data to disk
-        segment_path = os.path.join(self.output_directory, f"segment-{self.segment_index}.bin")
-        with open(segment_path, "wb") as f:
-            pickle.dump(data, f)
-            print(segment_path)
+        timestamp = data.pop("timestamp", None)
+        segment_duration = data.pop("segment_duration", None)
+        frame_rate = data.pop("frame_rate", None)
+
+        for key, item in data.items():
+            segment_folder = os.path.join(self.output_directory, "ID{}".format(key))
+            segment_path = os.path.join(segment_folder, "segment-{:05d}.bin".format(self.segment_index))
+            os.makedirs(segment_folder, exist_ok = True)
+            with open(segment_path, "wb") as f:
+                pickle.dump(item, f)
+
+            bandwidth = os.path.getsize(segment_path) * 8
+
+            if not self.mpd_manager.initialized:
+                self.mpd_manager.add_representation(key, "pointcloud/custom", "unified", bandwidth)
+
+            self.mpd_manager.update_segment(key, "1", segment_path, bandwidth)
+
+        if not self.mpd_manager.initialized:
+            self.mpd_manager.initialized = True
 
         # Update MPD and save it
-        self.mpd_manager.update_mpd(self.segment_index, bandwidth=999)
+        self.mpd_manager.update_metadata()
         self.mpd_manager.save_mpd()
-
-        # Increment segment index
         self.segment_index += 1
 
-    @staticmethod
-    def deserialize_data(data):
+    def deserialize_data(self, data):
         return pickle.loads(data)
 
 
 if __name__ == "__main__":
+    print("Strarting up")
     # Initialize server
     zmq_address = "tcp://*:5556"
     port = 8080
