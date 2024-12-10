@@ -11,7 +11,7 @@ from unified.model import model
 
 
 class Encoder():
-    def __init__(self, max_queue_size=60):
+    def __init__(self, max_queue_size=60, target_fps=3, gop_size=3):
         context = zmq.Context()
 
         # ZeroMQ
@@ -24,11 +24,14 @@ class Encoder():
         # Bounded queue for frame buffering
         self.queue = queue.Queue(maxsize=max_queue_size)
 
+        # GoP and Framerate Handling
+        self.target_fps = target_fps
+        self.gop_size = gop_size
+
         # Start a thread to read from the pull socket and populate the queue
         self.receiver_thread = threading.Thread(target=self.receive_data)
         self.receiver_thread.daemon = True
         self.receiver_thread.start()
-
 
         # Torch setup
         self.device = torch.device("cuda")
@@ -46,22 +49,28 @@ class Encoder():
 
 
     def receive_data(self):
+        t_start = None
+        batch = []
         while True:
             # Receiving
             serialized_data = self.pull_socket.recv()
-            try:
-                if self.queue.full():
-                    self.queue.get()
-                self.queue.put(serialized_data)
-            except Exception as e:
-                print(f"Error in receiver thread: {e}")
+            pointcloud = self.deserialize_data(serialized_data)
+            current_timestamp = pointcloud["timestamp"]
+            print(current_timestamp)
+            batch.append(pointcloud)
+
+            # Handle case where the queue is full
+            if self.queue.full():
+                self.queue.get()
+            
+            self.queue.put(pointcloud)
 
 
     def run(self):
+        if len(self.q
         while True:
             serialized_data = self.queue.get()
 
-            pointcloud = self.deserialize_data(serialized_data)
 
             # Compression
             compressed_data = self.compress(pointcloud)
