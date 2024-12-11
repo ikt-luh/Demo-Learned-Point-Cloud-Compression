@@ -85,12 +85,36 @@ docker run -p 5173:5173 -v $(pwd)/src/rendering:/app/src/rendering threejs-app
 
 ### Running the VR headset
 
-For running the Occulus Quest 2 VR headset, we use adb. It is required to install Sidequest for authorization.
+For running the Occulus Quest 2 VR headset, we use adb.
 
-First, check if the headset is accesible via adb:
+On the receiver device, run
+```
+    sudo apt-get install android-tools-adb
+```
+You will have to update udev rules for the headset. For this, run 
+```
+    lsusb
+```
+and get the ID of the Oculus VR, Inc. Quest 2 headset. This should look like "AAAA:BBBB".
+Then, add the following line to /etc/udev/rules.d/51-android.rules (Replacing AAAA and BBBB with the Device ID from lsusb)
+```
+SUBSYSTEM=="usb", ATTR{idVendor}=="AAAA", ATTR{idProduct}=="BBBB", MODE="0666", GROUP="plugdev"
+``` 
+
+Finally, update udev rules
+```
+sudo udevadm control --reload-rules
+```
+and unplug/replug the device
+
+
+Now, the device should be listed by
 ```
 adb devices
 ```
+
+In the Quest 2 Headset, allow connection. (Automatic pop-up)
+
 
 If it is, use reverse port forwarding to make the browser accesible
 ```
