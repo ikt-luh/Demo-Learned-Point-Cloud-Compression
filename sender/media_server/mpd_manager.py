@@ -4,8 +4,14 @@ import time
 
 
 class MPDManager:
-    def __init__(self, output_directory):
+    def __init__(self, output_directory, 
+    minimumUpdatePeriod=1,
+    minBufferTime=1,
+    timeShiftBufferDepth=1,
+    maxSegmentDuration=1,
+    ):
         self.output_directory = output_directory
+        self.maxSegmentDuration = maxSegmentDuration
         self.mpd_root = etree.Element(
             "MPD",
             xmlns="urn:mpeg:dash:schema:mpd:2011",
@@ -15,10 +21,10 @@ class MPDManager:
             type="dynamic",
             availabilityStartTime="1970-01-01T00:00:00Z",
             publishTime="1970-01-01T00:00:00Z",
-            minimumUpdatePeriod="PT1S",
-            minBufferTime="PT1S",
-            timeShiftBufferDepth="PT30S",
-            maxSegmentDuration="PT1S",
+            minimumUpdatePeriod=str(minimumUpdatePeriod),
+            minBufferTime=str(minBufferTime),
+            timeShiftBufferDepth=str(timeShiftBufferDepth),
+            maxSegmentDuration=str(maxSegmentDuration),
         )
         self.period = etree.SubElement(self.mpd_root, "Period", id="P0", start="PT0s")
         self.adaptation_set = None
@@ -32,14 +38,11 @@ class MPDManager:
             mimeType="pointcloud/custom",
             contentType="pointcloud",
             maxFrameRate="30",
-            subsegmentAlignment="true",
-            subsegmentStartsWithSAP="1",
         )
         etree.SubElement(
             self.adaptation_set,
             "SegmentTemplate",
-            duration="120",
-            timescale="30",
+            duration=str(self.maxSegmentDuration),
             media="ID$RepresentationID$/segment-$Number$.bin",
             startNumber="1",
             initialization="$RepresentationID$/init.m4s",

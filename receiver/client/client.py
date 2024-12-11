@@ -1,120 +1,96 @@
-import requests
-import xml.etree.ElementTree as ET
-import queue
-import threading
 import time
+import requests
 import zmq
-
+from threading import Thread
 
 class StreamingClient:
-    def __init__(self, mpd_url, target_buffer_duration=2, max_buffer_duration=10, bandwidth=None):
-        self.mpd_parser = MPDParser(mpd_url)
-        self.target_buffer_duration = target_buffer_duration
-        self.max_buffer_duration = max_buffer_duration
-        self.bandwidth = bandwidth
-
-        self.segment_buffer = queue.Queue()
-        self.buffer_lock = threading.Lock()
+    def __init__(self, mpd_url, zmq_address):
+        self.mpd_url = mpd_url
+        self.zmq_address = zmq_address
+        self.buffer = []
+        self.buffer_lock = Thread()
+        self.max_buffer_size = 10  # Can be adjusted based on minBufferTime and segment duration
+        self.buffer_target = 2
+        self.mpd_data = None
         self.segment_duration = None
+        self.last_publish_time = None
 
-        self.zmq_context = zmq.Context()
-        self.zmq_socket = self.zmq_context.socket(zmq.PUSH)
-        self.zmq_socket.connect("tcp://decoder:5555")
+        self.next_segment = None
 
-    def calculate_buffer_size(self, duration):
-        return max(1, int(duration / self.segment_duration))
+        self.context = zmq.Context()
+        self.socket = self.context.socket(zmq.PUSH)
+        self.socket.bind(self.zmq_address)
 
-    def fetch_segment_duration(self):
-        first_rep = next(iter(self.mpd_parser.representations.values()))
-        self.segment_duration = 1  # Assuming 1 second segments if not specified
+    def fetch_and_parse_mpd(self):
+        parser = MPDParser(self.mpd_url)
+        parser.fetch_mpd()
+        self.mpd_data = parser.parse_mpd()
+        self.segment_duration = self.mpd_data['periods'][0]['adaptation_sets'][0]['segment_template']['duration'] 
+        self.last_publish_time = self.mpd_data.get("publishTime")
 
-    def buffer_segments(self, rep_id):
-        target_size = self.calculate_buffer_size(self.target_buffer_duration)
-        max_size = self.calculate_buffer_size(self.max_buffer_duration)
+        self.next_segment = 0
 
-        while self.segment_buffer.qsize() < max_size:
-            try:
-                self.buffer_lock.acquire()
-                segment_data, metadata = self.download_segment(rep_id)
-                self.segment_buffer.put((segment_data, metadata))
-                print(f"Buffered segment {metadata['segment_number']} for {rep_id}. Buffer size: {self.segment_buffer.qsize()}")
+    def download_segment(self, quality, segment_number):
+        base_url = self.mpd_url.rsplit('/', 1)[0]
+        media_template = self.mpd_data['periods'][0]['adaptation_sets'][0]['segment_template']['media']
+        segment_url = base_url + "/" + media_template.replace("$Number$", str(next_segment_number))
+        segment_url = base_url + "/" + media_template.replace("$RepresentationID$", str(quality))
+        response = requests.get(url, stream=True)
+        if response.status_code == 200:
+            return response.content
+        else:
+            raise Exception(f"Failed to fetch segment: HTTP {response.status_code}")
 
-                if self.segment_buffer.qsize() >= target_size:
-                    break
-            finally:
-                self.buffer_lock.release()
+    def fill_buffer(self):
+        while True:
+            t_0 = time.time()
+            if len(self.buffer) < self.max_buffer_size:
+                try:
+                    next_segment_number = math.floor((time.time() - self.buffer_target) / self.segment_duration)
+                    segment_data = self.download_segment(segment_index)
+                    self.buffer.append(segment_data)
+                except Exception as e:
+                    print("Not available")
+                    time.sleep(0.1)
 
-    def download_segment(self, rep_id):
-        rep_data = self.mpd_parser.representations[rep_id]
-        segment_number = rep_data['next_segment']
-        segment_url = self.mpd_parser.mpd_url.rsplit('/', 1)[0] + '/' + rep_data['media_template'].replace('$RepresentationID$', rep_id).replace('$Number$', str(segment_number))
-        
-        print(f"Downloading segment {segment_number} for {rep_id}...")
-        response = requests.get(segment_url)
-        response.raise_for_status()
-
-        metadata = {
-            'type': 'segment',
-            'rep_id': rep_id,
-            'segment_number': segment_number
-        }
-        
-        self.mpd_parser.representations[rep_id]['next_segment'] += 1
-        return response.content, metadata
+            if len(self.buffer) * self.segment_duration > self.buffer_target:
+                t_1 = time.time()
+                passed_time = t_1 - t_0
+                time.sleep(self.segment_duration - passed_time)
 
     def consume_buffer(self):
         while True:
-            if not self.segment_buffer.empty():
-                self.buffer_lock.acquire()
-                try:
-                    segment_data, metadata = self.segment_buffer.get()
-                    self.send_data(segment_data, metadata)
-                    print(f"Consumed segment {metadata['segment_number']} for {metadata['rep_id']}. Buffer size: {self.segment_buffer.qsize()}")
-                finally:
-                    self.buffer_lock.release()
-            time.sleep(0.1)
+            t_0 = time.time()
+            if self.buffer:
+                segment_data = self.buffer.pop(0)
+                self.socket.send(segment_data)
+            t_1 = time.time()
+            passed_time = t_1 - t_0
+            time.sleep(self.segment_duration - passed_time)
 
-    def send_data(self, segment_data, metadata):
-        self.zmq_socket.send_json(metadata)
-        self.zmq_socket.send(segment_data)
-
-    def select_representation(self):
-        if self.bandwidth:
-            suitable_reps = sorted(
-                self.mpd_parser.representations.items(),
-                key=lambda x: abs(x[1]['bandwidth'] - self.bandwidth)
-            )
-            return suitable_reps[0][0]
-        return next(iter(self.mpd_parser.representations))
-
-    def start_streaming(self):
-        threading.Thread(target=self.consume_buffer, daemon=True).start()
-
+    def check_for_updates(self):
         while True:
-            try:
-                print("Fetching and parsing MPD...")
-                mpd_root = self.mpd_parser.fetch_mpd()
-                self.mpd_parser.parse_mpd(mpd_root)
+            time.sleep(float(self.mpd_data.get("minimumUpdatePeriod", 2)))
+            parser = MPDParser(self.mpd_url)
+            parser.fetch_mpd()
+            new_mpd_data = parser.parse_mpd()
 
-                if not self.segment_duration:
-                    self.fetch_segment_duration()
+            if new_mpd_data.get("publishTime") != self.last_publish_time:
+                self.mpd_data = new_mpd_data
+                self.last_publish_time = new_mpd_data.get("publishTime")
 
-                rep_id = self.select_representation()
-                print(f"Selected representation: {rep_id}")
+    def start(self):
+        self.fetch_and_parse_mpd()
 
-                self.buffer_segments(rep_id)
-                time.sleep(1)
+        Thread(target=self.fill_buffer).start()
+        Thread(target=self.consume_buffer).start()
+        if self.mpd_data["type"] == "dynamic":
+            Thread(target=self.check_for_updates).start()
 
-            except Exception as e:
-                print(f"Error: {e}")
-                time.sleep(2)
-
-
+# Example usage
 if __name__ == "__main__":
-    MPD_URL = "http:/***/media/manifest.mpd"
-    target_buffer = 2
-    max_buffer = 10
-    bandwidth = 10000
+    mpd_url = "<URL_TO_MPD_FILE>"  # Replace with actual MPD URL
+    zmq_address = "tcp://127.0.0.1:5555"  # Example ZMQ address
 
-    client = StreamingClient(MPD_URL, target_buffer, max_buffer, bandwidth=bandwidth)
-    client.start_streaming()
+    client = StreamingClient(mpd_url, zmq_address)
+    client.start()

@@ -20,4 +20,4 @@ COPY . /app/
 EXPOSE 5555
 
 # Run the streaming client
-CMD ["python", "streaming_client.py"]
+CMD ["python", "client.py"]
