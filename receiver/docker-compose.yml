@@ -3,6 +3,7 @@ services:
     build:
       context: ./client
     container_name: client
+    environment:
       - ZMQ_SOCKET="tcp://decoder:5555"
     networks:
       - receiver_network
@@ -27,8 +28,8 @@ services:
       context: ./visualizer
     container_name: visualizer
     ports:
-      - "8080:8080"
-      - "5556:5556"
+      #- "8080:8080"
+      - "5173:5173"
     environment:
       - ZMQ_PULL_SOCKET="tcp://decoder:5556"
     networks:
