@@ -1,3 +1,4 @@
+import math
 import time
 import os
 import zmq
@@ -11,7 +12,6 @@ class StreamingServer:
         # Setup directories and MPD Manager
         self.output_directory = output_directory
         os.makedirs(self.output_directory, exist_ok=True)
-        print(self.output_directory)
 
         self.mpd_manager = MPDManager(self.output_directory)
         self.mpd_manager.setup_adaptation_set()
@@ -22,30 +22,37 @@ class StreamingServer:
         self.pull_socket.bind(zmq_address)
 
         self.port = port
-        self.segment_index = 1
 
     def start_http_server(self):
+        """
+        Start the HTTP Server at the output directory defined in the constructor.
+        """
         HTTPServerHandler.start(directory=self.output_directory, port=self.port)
 
     def run(self):
+        """
+        Run the media server until termination. 
+        Receive serialized data, deserialize and handle data (i.e. updating MPD, saving to disk)
+        """
         while True:
-            # Receive data from ZeroMQ
             serialized_data = self.pull_socket.recv()
             data = self.deserialize_data(serialized_data)
 
-            print(f"Timestamp delta: {time.time() - data['timestamp']}")
-
-            # Handle data (save to disk, update MPD, etc.)
             self.handle_data(data)
+            #print(f"Timestamp delta: {time.time() - data['timestamp']}")
 
     def handle_data(self, data):
+        """
+        Handle the data
+        """
         timestamp = data.pop("timestamp", None)
         segment_duration = data.pop("segment_duration", None)
         frame_rate = data.pop("frame_rate", None)
 
+        number = math.floor(time.time() / segment_duration)
         for key, item in data.items():
             segment_folder = os.path.join(self.output_directory, "ID{}".format(key))
-            segment_path = os.path.join(segment_folder, "segment-{:05d}.bin".format(self.segment_index))
+            segment_path = os.path.join(segment_folder, "segment-{:015d}.bin".format(number))
             os.makedirs(segment_folder, exist_ok = True)
             with open(segment_path, "wb") as f:
                 pickle.dump(item, f)
@@ -63,14 +70,21 @@ class StreamingServer:
         # Update MPD and save it
         self.mpd_manager.update_metadata()
         self.mpd_manager.save_mpd()
-        self.segment_index += 1
 
     def deserialize_data(self, data):
+        """
+        Deserialize the data.
+
+        Paramters:
+            data (string) : Serialized data from pickle
+        Returns:
+            data (dict) : Deserialized data
+        """
+
         return pickle.loads(data)
 
 
 if __name__ == "__main__":
-    print("Strarting up")
     # Initialize server
     zmq_address = "tcp://*:5556"
     port = 8080

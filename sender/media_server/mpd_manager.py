@@ -15,10 +15,10 @@ class MPDManager:
             type="dynamic",
             availabilityStartTime="1970-01-01T00:00:00Z",
             publishTime="1970-01-01T00:00:00Z",
-            minimumUpdatePeriod="PT2S",
-            minBufferTime="PT2S",
-            timeShiftBufferDepth="PT1M",
-            maxSegmentDuration="PT2S",
+            minimumUpdatePeriod="PT1S",
+            minBufferTime="PT1S",
+            timeShiftBufferDepth="PT30S",
+            maxSegmentDuration="PT1S",
         )
         self.period = etree.SubElement(self.mpd_root, "Period", id="P0", start="PT0s")
         self.adaptation_set = None
@@ -42,7 +42,7 @@ class MPDManager:
             timescale="30",
             media="ID$RepresentationID$/segment-$Number$.bin",
             startNumber="1",
-            initialization="$RepresentationID$/$RepresentationID$_0.m4s",
+            initialization="$RepresentationID$/init.m4s",
         )
 
     def add_representation(self, rep_id, mime_type, codecs, bandwidth):
@@ -60,7 +60,7 @@ class MPDManager:
         self.representations[rep_id] = {"element": representation, "segments": []}
 
         # Create the correct folder structure for initialization files
-        init_path = os.path.join(self.output_directory, f"ID{rep_id}/init_{rep_id}.m4s")
+        init_path = os.path.join(self.output_directory, f"ID{rep_id}/init.m4s")
         os.makedirs(os.path.dirname(init_path), exist_ok=True)
         with open(init_path, "wb") as init_file:
             init_file.write(b"")  # Placeholder for initialization data
@@ -83,6 +83,9 @@ class MPDManager:
         )
 
     def save_mpd(self):
+        """
+        Save the current MPD to the output directory
+        """
         mpd_path = os.path.join(self.output_directory, "manifest.mpd")
         mpd_content = etree.tostring(self.mpd_root, pretty_print=True, xml_declaration=True, encoding="UTF-8")
         with open(mpd_path, "wb") as f:
