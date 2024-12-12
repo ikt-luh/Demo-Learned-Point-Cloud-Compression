@@ -139,3 +139,10 @@ sudo groupadd docker
 sudo usermod -aG docker $USER
 newgrp docker
 ```
+You might need to reboot the device.
+
+### Setting the power mode
+For maximum performance, we want both jetson's to run in Power Mode 0 (MAXN)
+```
+sudo /usr/sbin/nvpmodel -m 0
+```
