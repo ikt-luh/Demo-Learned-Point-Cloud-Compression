@@ -33,11 +33,18 @@ The project is structured as follows
 For setup, collect the required dependencies:
 ```
 	mkdir dependencies && cd dependencies
-	git clone git@gitlab.uni-hannover.de:ve-intern/research/unified-compression.git
+	git clone --branch unified_demo git@gitlab.uni-hannover.de:ve-intern/research/unified-compression.git
 ```
 
 
 ### Sender
+First, we need to open the port for the media server:
+
+```
+sudo iptables -A INPUT -p tcp --dport 4000 -j ACCEPT
+```
+
+
 On the sender device, make sure a ZED Camera is plugged in, then run
 ```
 cd sender
@@ -121,4 +128,14 @@ If it is, use reverse port forwarding to make the browser accesible
 adb reverse tcp:5173 tcp:5173
 adb reverse tcp:8765 tcp:8765
 adb reverse tcp:8765 tcp:8765
+```
+
+
+## Notes
+### Adding the docker group
+By default, you might not be in the docker group, unable to run containers. To solve this:
+```
+sudo groupadd docker
+sudo usermod -aG docker $USER
+newgrp docker
 ```
