@@ -1,3 +1,4 @@
+from datetime import datetime
 import math
 import time
 import os
@@ -7,9 +8,13 @@ import threading
 from server import HTTPServerHandler
 from mpd_manager import MPDManager
 
+shared_epoch = datetime(2024, 1, 1, 0, 0, 0).timestamp()
+
+
 class StreamingServer:
-    def __init__(self, output_directory="./media", zmq_address="tcp://*:5556", port=8080):
+    def __init__(self, ip_addr, output_directory="./media", zmq_address="tcp://*:5556", port=8080):
         # Setup directories and MPD Manager
+        self.ip_addr = ip_addr
         self.output_directory = output_directory
         os.makedirs(self.output_directory, exist_ok=True)
 
@@ -27,7 +32,7 @@ class StreamingServer:
         """
         Start the HTTP Server at the output directory defined in the constructor.
         """
-        HTTPServerHandler.start(directory=self.output_directory, port=self.port)
+        HTTPServerHandler.start(directory=self.output_directory, ip_addr=self.ip_addr, port=self.port)
 
     def run(self):
         """
@@ -49,7 +54,9 @@ class StreamingServer:
         segment_duration = data.pop("segment_duration", None)
         frame_rate = data.pop("frame_rate", None)
 
-        number = math.floor(time.time() / segment_duration)
+        timestamp = datetime.now().timestamp() - shared_epoch
+        number = math.floor((timestamp) / segment_duration) 
+        print("Segment Number: {}".format(number))
         for key, item in data.items():
             segment_folder = os.path.join(self.output_directory, "ID{}".format(key))
             segment_path = os.path.join(segment_folder, "segment-{:015d}.bin".format(number))
@@ -88,10 +95,11 @@ class StreamingServer:
 
 if __name__ == "__main__":
     # Initialize server
+    ip_addr = "0.0.0.0"
     zmq_address = "tcp://*:5556"
     port = 8080
 
-    server = StreamingServer(zmq_address=zmq_address, port=port)
+    server = StreamingServer(ip_addr, zmq_address=zmq_address, port=port)
 
     threading.Thread(target=server.start_http_server, daemon=True).start()
 
