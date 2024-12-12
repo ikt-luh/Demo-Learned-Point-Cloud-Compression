@@ -4,7 +4,7 @@ services:
       context: ./client
     container_name: client
     environment:
-      - ZMQ_SOCKET="tcp://decoder:5555"
+      - ZMQ_PUSH_SOCKET="tcp://decoder:5555"
     networks:
       - receiver_network
 

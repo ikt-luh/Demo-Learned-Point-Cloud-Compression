@@ -53,7 +53,6 @@ class MPDParser:
                 if segment_template is not None:
                     adaptation_data["segment_template"] = {
                         "duration": int(segment_template.get("duration")),
-                        "timescale": int(segment_template.get("timescale")),
                         "media": segment_template.get("media"),
                         "startNumber": int(segment_template.get("startNumber")),
                         "initialization": segment_template.get("initialization")
