@@ -71,6 +71,8 @@ class StreamingServer:
         self.mpd_manager.update_metadata()
         self.mpd_manager.save_mpd()
 
+
+
     def deserialize_data(self, data):
         """
         Deserialize the data.
