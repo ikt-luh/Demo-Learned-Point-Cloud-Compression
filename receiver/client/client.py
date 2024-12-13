@@ -10,9 +10,8 @@ from mpd_parser import MPDParser
 shared_epoch = datetime(2024, 1, 1, 0, 0, 0).timestamp()
 
 class StreamingClient:
-    def __init__(self, mpd_url, zmq_address):
+    def __init__(self, mpd_url):
         self.mpd_url = mpd_url
-        self.zmq_address = zmq_address
         self.buffer = []
         self.buffer_lock = Thread()
         self.max_buffer_size = 10  # Can be adjusted based on minBufferTime and segment duration
@@ -43,34 +42,31 @@ class StreamingClient:
         segment_url = segment_url.replace("$RepresentationID$", str(quality))
         response = requests.get(segment_url, stream=True)
         if response.status_code == 200:
+            print("Done")
             return response.content
         else:
             raise Exception(f"Failed to fetch segment: HTTP {response.status_code}")
 
     def fill_buffer(self):
-        last_segment = 0
-        while True:
-            t_0 = time.time()
-            if len(self.buffer) < self.max_buffer_size:
-                try:
-                    timestamp = datetime.now().timestamp() - shared_epoch
-                    next_segment_number = math.floor((timestamp - self.buffer_target) / self.segment_duration)
-                    if next_segment_number > last_segment:
-                        segment_data = self.download_segment(0, next_segment_number)
-                        last_segment = next_segment_number
-                except Exception as e:
-                    time.sleep(0.5)
+        if len(self.buffer) < self.max_buffer_size:
+            try:
+                timestamp = datetime.now().timestamp() - shared_epoch
+                next_segment_number = math.floor((timestamp - self.buffer_target) / self.segment_duration)
 
-            if len(self.buffer) * self.segment_duration > self.buffer_target:
-                t_1 = time.time()
-                passed_time = t_1 - t_0
-                time.sleep(self.segment_duration - passed_time)
+                print("Downloading")
+                segment_data = self.download_segment(0, next_segment_number)
+                self.buffer.push(segment_data)
+                print(len(self.buffer))
+
+                last_segment = next_segment_number
+            except Exception as e:
+                print(e)
 
     def consume_buffer(self):
         next_target_time = time.time()
         while True:
             current_time = time.time()
-            if self.buffer:
+            if len(self.buffer) > 0:
                 print("{}: Consuming buffer ....".format(current_time))
                 segment_data = self.buffer.pop(0)
                 self.socket.send(segment_data)
@@ -78,11 +74,14 @@ class StreamingClient:
                 next_target_time += self.segment_duration
 
                 sleep_time = max(0, next_target_time - time.time())
+                print("Sleeping")
                 time.sleep(sleep_time)
+                print("done sleeping")
             else:
                 time.sleep(0.05) #Wait for buffer filling
 
     def check_for_updates(self):
+        next_target_time = time.time()
         while True:
             time.sleep(float(self.mpd_data.get("minimumUpdatePeriod", 2)))
             parser = MPDParser(self.mpd_url)
@@ -92,6 +91,8 @@ class StreamingClient:
             if new_mpd_data.get("publishTime") != self.last_publish_time:
                 self.mpd_data = new_mpd_data
                 self.last_publish_time = new_mpd_data.get("publishTime")
+            
+            self.fill_buffer() 
 
     def start(self):
         self.fetch_and_parse_mpd()
@@ -104,7 +105,6 @@ class StreamingClient:
 # Example usage
 if __name__ == "__main__":
     mpd_url = "http://172.23.181.103:8080/media/manifest.mpd"  # Replace with actual MPD URL
-    zmq_address = "tcp://decoder:5555"  # Example ZMQ address
 
-    client = StreamingClient(mpd_url, zmq_address)
+    client = StreamingClient(mpd_url)
     client.start()

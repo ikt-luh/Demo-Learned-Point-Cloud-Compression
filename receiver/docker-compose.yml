@@ -28,8 +28,8 @@ services:
       context: ./visualizer
     container_name: visualizer
     ports:
-      #- "8080:8080"
       - "5173:5173"
+      #- "8080:8080"
     environment:
       - ZMQ_PULL_SOCKET="tcp://decoder:5556"
     networks:

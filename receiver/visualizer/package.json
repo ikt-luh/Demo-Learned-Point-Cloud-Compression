@@ -1,0 +1,31 @@
+{
+    "name": "point-cloud-visualizer",
+    "version": "1.0.0",
+    "description": "A Vite-powered web app for rendering point clouds with Three.js and ZeroMQ integration.",
+    "main": "index.js",
+    "scripts": {
+      "dev": "vite --host 0.0.0.0 --port 5173",
+      "build": "vite build",
+      "serve": "vite preview"
+    },
+    "dependencies": {
+      "three": "^0.154.0",
+      "zeromq": "^5.2.8"
+    },
+    "devDependencies": {
+      "vite": "^4.3.5"
+    },
+    "engines": {
+      "node": ">=18.0.0",
+      "npm": ">=8.0.0"
+    },
+    "keywords": [
+      "point-cloud",
+      "three.js",
+      "vite",
+      "zeromq"
+    ],
+    "author": "Michael Rudolph",
+    "license": "MIT"
+  }
+  
