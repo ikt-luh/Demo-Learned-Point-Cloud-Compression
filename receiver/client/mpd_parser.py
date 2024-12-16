@@ -1,3 +1,5 @@
+import sys
+import time
 import requests
 import xml.etree.ElementTree as ET
 
@@ -7,13 +9,23 @@ class MPDParser:
         self.mpd_tree = None
         self.mpd_root = None
 
+
     def fetch_mpd(self):
-        response = requests.get(self.mpd_url)
-        if response.status_code == 200:
-            self.mpd_tree = ET.ElementTree(ET.fromstring(response.content))
-            self.mpd_root = self.mpd_tree.getroot()
+        for attempt in range(3):  # Try 3 times
+            response = requests.get(self.mpd_url)
+            if response.status_code == 200:
+                if response.content.strip():
+                    self.mpd_tree = ET.ElementTree(ET.fromstring(response.content))
+                    self.mpd_root = self.mpd_tree.getroot()
+                    break
+                else:
+                    print(f"Attempt {attempt + 1}: Received empty response.")
+            else:
+                print(f"Attempt {attempt + 1}: Failed to fetch MPD: HTTP {response.status_code}")
+            time.sleep(0.3)  # Wait before retrying
         else:
-            raise Exception(f"Failed to fetch MPD: HTTP {response.status_code}")
+            print("Failed to fetch valid MPD after 3 attempts")
+        sys.stdout.flush()
 
     def parse_mpd(self):
         if self.mpd_root is None:

@@ -2,6 +2,7 @@ import sys
 import threading
 import time
 import requests
+import math
 import zmq
 from datetime import datetime
 from mpd_parser import MPDParser
@@ -19,7 +20,7 @@ class StreamingClient:
         self.mpd_data = None
         self.fixed_quality = fixed_quality
         self.bandwidth = 1000  # Example: 1000 kbps
-        self.request_offset = 1.0
+        self.request_offset = 0.8
         
         # ZMQ setup
         context = zmq.Context()
@@ -42,6 +43,8 @@ class StreamingClient:
         self.mpd_data = parser.parse_mpd()
         self.segment_duration = self.mpd_data['periods'][0]['adaptation_sets'][0]['segment_template']['duration']
         self.last_publish_time = self.mpd_data.get("publishTime")
+        print("Fetching")
+        sys.stdout.flush()
 
     def decide_quality(self):
         """Determine quality level based on bandwidth."""
@@ -63,8 +66,6 @@ class StreamingClient:
             try:
                 response = requests.get(segment_url, stream=True)
                 if response.status_code == 200:
-                    print(f"Downloaded segment {segment_number}")
-                    sys.stdout.flush()
                     return response.content
                 time.sleep(self.segment_duration / 3)  # Short delay before retry
             except Exception as e:
@@ -74,42 +75,37 @@ class StreamingClient:
     def mpd_updater(self):
         """Periodically checks and updates MPD."""
         while True:
-            timestamp = datetime.now().timestamp() - shared_epoch
-            print(timestamp)
+            timestamp = datetime.now().timestamp() 
 
             parser = MPDParser(self.mpd_url)
             parser.fetch_mpd()
             new_mpd_data = parser.parse_mpd()
 
             if new_mpd_data.get("publishTime") != self.last_publish_time:
-                print("MPD updated.")
                 self.mpd_data = new_mpd_data
                 self.last_publish_time = new_mpd_data.get("publishTime")
 
-                next_segment_number = int((timestamp - self.request_offset) / self.segment_duration)
+                next_segment_number = math.floor((timestamp - self.request_offset) / self.segment_duration)
+                print(next_segment_number, flush=True)
                 if next_segment_number > self.last_segment_number:
                     threading.Thread(target=self.segment_downloader, args=(next_segment_number, ), daemon=True).start()
                     self.last_segment_number = next_segment_number
 
-            # Synchronize to the next segment boundary
-            next_boundary = (
-                shared_epoch
-                + self.request_offset
-                + ((int((timestamp - self.request_offset) / self.segment_duration) + 1) * self.segment_duration)
-            )
-            sleep_time = max(0, next_boundary - datetime.now().timestamp())
-            print(f"Sleeping for {sleep_time:.2f} seconds")
-            sys.stdout.flush()
+            sleep_time = max(0, self.segment_duration - (datetime.now().timestamp() - timestamp))
             time.sleep(sleep_time)
+            print(f"Sleeping for {sleep_time:.2f} seconds", flush=True)
 
     def segment_downloader(self, next_segment_number):
         """Downloads and sends segments to the decoder."""
         # This will require the qualities available and the current estimated bandwidth
         quality = self.decide_quality()
         segment_data = self.download_segment(quality, next_segment_number)
+        print("Downloaded segment {}".format(next_segment_number, flush=True))
         if segment_data:
             self.downloaded_segments.add(next_segment_number)
             self.decoder_push_socket.send(segment_data)
+        else: 
+            print("segment_downloader: Not downloaded...", flush=True)
 
     def decoder_receiver(self):
         """Receives processed data from the decoder."""
@@ -117,18 +113,19 @@ class StreamingClient:
             decoded_data = self.decoder_pull_socket.recv()
             with self.decoder_output_lock:
                 self.decoder_output.append(decoded_data)
-                print("Received decoded data.")
-                sys.stdout.flush()
+                print("Received decoded data.", flush=True)
+
 
     def visualizer_sender(self):
         """Sends processed data to the visualizer."""
         while True:
-            with self.decoder_output_lock:
-                if self.decoder_output:
+            if self.decoder_output:
+                with self.decoder_output_lock:
                     data = self.decoder_output.pop(0)
                     self.visualizer_socket.send(data)
-                    print("Sent data to visualizer.")
-            time.sleep(0.05)
+                    print("Sent data to visualizer.", flush=True)
+            else:
+                time.sleep(0.05)
 
     def start(self):
         """Starts all threads."""
@@ -148,7 +145,7 @@ class StreamingClient:
 # Example usage
 if __name__ == "__main__":
     mpd_url = "http://172.23.181.103:8080/media/manifest.mpd"
-    fixed_quality = 1
+    fixed_quality = 0
 
     client = StreamingClient(mpd_url, fixed_quality=fixed_quality)
     client.start()
