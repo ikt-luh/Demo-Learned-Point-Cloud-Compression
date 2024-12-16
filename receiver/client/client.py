@@ -1,96 +1,154 @@
+import sys
+import threading
 import time
 import requests
 import zmq
-from threading import Thread
+from datetime import datetime
+from mpd_parser import MPDParser
+
+shared_epoch = datetime(2024, 1, 1, 0, 0, 0).timestamp()
 
 class StreamingClient:
-    def __init__(self, mpd_url, zmq_address):
+    def __init__(self, mpd_url, fixed_quality=None):
         self.mpd_url = mpd_url
-        self.zmq_address = zmq_address
         self.buffer = []
-        self.buffer_lock = Thread()
-        self.max_buffer_size = 10  # Can be adjusted based on minBufferTime and segment duration
-        self.buffer_target = 2
-        self.mpd_data = None
+        self.max_buffer_size = 10
+        self.downloaded_segments = set()
         self.segment_duration = None
         self.last_publish_time = None
+        self.mpd_data = None
+        self.fixed_quality = fixed_quality
+        self.bandwidth = 1000  # Example: 1000 kbps
+        self.request_offset = 1.0
+        
+        # ZMQ setup
+        context = zmq.Context()
+        self.decoder_push_socket = context.socket(zmq.PUSH)
+        self.decoder_push_socket.connect("tcp://decoder:5555")
+        self.decoder_pull_socket = context.socket(zmq.PULL)
+        self.decoder_pull_socket.bind("tcp://*:5555")
 
-        self.next_segment = None
+        self.visualizer_socket = context.socket(zmq.PUSH)
+        self.visualizer_socket.connect("tcp://visualizer:5556")
 
-        self.context = zmq.Context()
-        self.socket = self.context.socket(zmq.PUSH)
-        self.socket.bind(self.zmq_address)
+        # Locks for thread safety
+        self.buffer_lock = threading.Lock()
+        self.decoder_output_lock = threading.Lock()
+        self.decoder_output = []  # Holds data received from the decoder
 
     def fetch_and_parse_mpd(self):
         parser = MPDParser(self.mpd_url)
         parser.fetch_mpd()
         self.mpd_data = parser.parse_mpd()
-        self.segment_duration = self.mpd_data['periods'][0]['adaptation_sets'][0]['segment_template']['duration'] 
+        self.segment_duration = self.mpd_data['periods'][0]['adaptation_sets'][0]['segment_template']['duration']
         self.last_publish_time = self.mpd_data.get("publishTime")
 
-        self.next_segment = 0
+    def decide_quality(self):
+        """Determine quality level based on bandwidth."""
+        if self.fixed_quality is not None:
+            return self.fixed_quality
+        if self.bandwidth > 2000:
+            return 0
+        elif self.bandwidth > 1000:
+            return 1
+        return 2
 
     def download_segment(self, quality, segment_number):
         base_url = self.mpd_url.rsplit('/', 1)[0]
         media_template = self.mpd_data['periods'][0]['adaptation_sets'][0]['segment_template']['media']
-        segment_url = base_url + "/" + media_template.replace("$Number$", str(next_segment_number))
-        segment_url = base_url + "/" + media_template.replace("$RepresentationID$", str(quality))
-        response = requests.get(url, stream=True)
-        if response.status_code == 200:
-            return response.content
-        else:
-            raise Exception(f"Failed to fetch segment: HTTP {response.status_code}")
+        segment_url = base_url + "/" + media_template.replace("$Number$", "{:015d}".format(segment_number))
+        segment_url = segment_url.replace("$RepresentationID$", str(quality))
 
-    def fill_buffer(self):
+        for attempt in range(3):  # Retry logic
+            try:
+                response = requests.get(segment_url, stream=True)
+                if response.status_code == 200:
+                    print(f"Downloaded segment {segment_number}")
+                    sys.stdout.flush()
+                    return response.content
+                time.sleep(self.segment_duration / 3)  # Short delay before retry
+            except Exception as e:
+                print(f"Failed to download segment {segment_number}, attempt {attempt + 1}: {e}")
+        return None
+
+    def mpd_updater(self):
+        """Periodically checks and updates MPD."""
         while True:
-            t_0 = time.time()
-            if len(self.buffer) < self.max_buffer_size:
-                try:
-                    next_segment_number = math.floor((time.time() - self.buffer_target) / self.segment_duration)
-                    segment_data = self.download_segment(segment_index)
-                    self.buffer.append(segment_data)
-                except Exception as e:
-                    print("Not available")
-                    time.sleep(0.1)
+            timestamp = datetime.now().timestamp() - shared_epoch
+            print(timestamp)
 
-            if len(self.buffer) * self.segment_duration > self.buffer_target:
-                t_1 = time.time()
-                passed_time = t_1 - t_0
-                time.sleep(self.segment_duration - passed_time)
-
-    def consume_buffer(self):
-        while True:
-            t_0 = time.time()
-            if self.buffer:
-                segment_data = self.buffer.pop(0)
-                self.socket.send(segment_data)
-            t_1 = time.time()
-            passed_time = t_1 - t_0
-            time.sleep(self.segment_duration - passed_time)
-
-    def check_for_updates(self):
-        while True:
-            time.sleep(float(self.mpd_data.get("minimumUpdatePeriod", 2)))
             parser = MPDParser(self.mpd_url)
             parser.fetch_mpd()
             new_mpd_data = parser.parse_mpd()
 
             if new_mpd_data.get("publishTime") != self.last_publish_time:
+                print("MPD updated.")
                 self.mpd_data = new_mpd_data
                 self.last_publish_time = new_mpd_data.get("publishTime")
 
+                next_segment_number = int((timestamp - self.request_offset) / self.segment_duration)
+                if next_segment_number > self.last_segment_number:
+                    threading.Thread(target=self.segment_downloader, args=(next_segment_number, ), daemon=True).start()
+                    self.last_segment_number = next_segment_number
+
+            # Synchronize to the next segment boundary
+            next_boundary = (
+                shared_epoch
+                + self.request_offset
+                + ((int((timestamp - self.request_offset) / self.segment_duration) + 1) * self.segment_duration)
+            )
+            sleep_time = max(0, next_boundary - datetime.now().timestamp())
+            print(f"Sleeping for {sleep_time:.2f} seconds")
+            sys.stdout.flush()
+            time.sleep(sleep_time)
+
+    def segment_downloader(self, next_segment_number):
+        """Downloads and sends segments to the decoder."""
+        # This will require the qualities available and the current estimated bandwidth
+        quality = self.decide_quality()
+        segment_data = self.download_segment(quality, next_segment_number)
+        if segment_data:
+            self.downloaded_segments.add(next_segment_number)
+            self.decoder_push_socket.send(segment_data)
+
+    def decoder_receiver(self):
+        """Receives processed data from the decoder."""
+        while True:
+            decoded_data = self.decoder_pull_socket.recv()
+            with self.decoder_output_lock:
+                self.decoder_output.append(decoded_data)
+                print("Received decoded data.")
+                sys.stdout.flush()
+
+    def visualizer_sender(self):
+        """Sends processed data to the visualizer."""
+        while True:
+            with self.decoder_output_lock:
+                if self.decoder_output:
+                    data = self.decoder_output.pop(0)
+                    self.visualizer_socket.send(data)
+                    print("Sent data to visualizer.")
+            time.sleep(0.05)
+
     def start(self):
+        """Starts all threads."""
         self.fetch_and_parse_mpd()
 
-        Thread(target=self.fill_buffer).start()
-        Thread(target=self.consume_buffer).start()
-        if self.mpd_data["type"] == "dynamic":
-            Thread(target=self.check_for_updates).start()
+        self.last_segment_number = 2
+
+        # Start threads
+        threading.Thread(target=self.mpd_updater, daemon=True).start()
+        threading.Thread(target=self.decoder_receiver, daemon=True).start()
+        threading.Thread(target=self.visualizer_sender, daemon=True).start()
+
+        # Keep main thread alive
+        while True:
+            time.sleep(1)
 
 # Example usage
 if __name__ == "__main__":
-    mpd_url = "<URL_TO_MPD_FILE>"  # Replace with actual MPD URL
-    zmq_address = "tcp://127.0.0.1:5555"  # Example ZMQ address
+    mpd_url = "http://172.23.181.103:8080/media/manifest.mpd"
+    fixed_quality = 1
 
-    client = StreamingClient(mpd_url, zmq_address)
+    client = StreamingClient(mpd_url, fixed_quality=fixed_quality)
     client.start()

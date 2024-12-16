@@ -1,14 +1,14 @@
-# Use the official Node.js image as a parent image
-FROM node:20
+# Base image for Ubuntu
+FROM ubuntu:20.04
 
 # Prevent interactive prompts during installation
 ARG DEBIAN_FRONTEND=noninteractive
 
-# Install Python and required dependencies
-RUN apt-get update && apt-get -y install \
-    python3 python3-pip python3-venv \
-    libtool pkg-config build-essential \
-    autoconf automake uuid-dev wget \
+# Install Python, Node.js, and dependencies
+RUN apt-get update && apt-get install -y \
+    python3 python3-pip python3-dev python3-venv curl \
+    && curl -fsSL https://deb.nodesource.com/setup_16.x | bash - \
+    && apt-get install -y nodejs \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -22,25 +22,16 @@ COPY package*.json ./
 RUN npm install --save three \
     && npm install --save-dev vite
 
+RUN npm install -g concurrently
 
-# Create a virtual environment for Python
-RUN python3 -m venv /env
+# Install Python dependencies
+COPY ./requirements.txt ./requirements.txt
+RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Ensure the virtual environment's pip is up-to-date
-RUN /env/bin/pip install --upgrade pip
+COPY . . 
 
-# Copy the Python requirements file and install Python dependencies in the virtual environment
-COPY requirements.txt .
-RUN /env/bin/pip install --no-cache-dir -r requirements.txt
-
-# Copy the rest of the project files into the container
-COPY . .
-
-# Install a lightweight HTTP server globally
-RUN npm install -g http-server
-
-# Expose the development server port
-EXPOSE 5173
+# Expose the development server port and backend port
+EXPOSE 5173 8080
 
 # Default command to run both the Python script and Vite development server
-CMD ["sh", "-c", "npx vite --host 0.0.0.0 --port 5173"]
+CMD ["sh", "-c", "concurrently --kill-others \"npx vite --host 0.0.0.0 --port 5173\" \"python3 /app/backend.py\""]

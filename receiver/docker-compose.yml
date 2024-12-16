@@ -4,7 +4,9 @@ services:
       context: ./client
     container_name: client
     environment:
-      - ZMQ_SOCKET="tcp://decoder:5555"
+      - ZMQ_PUSH_SOCKET="tcp://decoder:5555"
+      - ZMQ_PULL_SOCKET="tcp://decoder:5555"
+      - ZMQ_PUSH_SOCKET="tcp://visualizer:5555"
     networks:
       - receiver_network
 
@@ -19,7 +21,7 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
       - ZMQ_PULL_SOCKET="tcp://client:5555"
-      - ZMQ_PUSH_SOCKET="tcp://visualizer:5556"
+      - ZMQ_PUSH_SOCKET="tcp://client:5555"
     networks:
       - receiver_network
 
@@ -28,10 +30,10 @@ services:
       context: ./visualizer
     container_name: visualizer
     ports:
-      #- "8080:8080"
       - "5173:5173"
+      #- "8080:8080"
     environment:
-      - ZMQ_PULL_SOCKET="tcp://decoder:5556"
+      - ZMQ_PULL_SOCKET="tcp://client:5556"
     networks:
       - receiver_network
 
