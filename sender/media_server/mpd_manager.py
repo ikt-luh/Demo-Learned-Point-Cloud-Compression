@@ -1,6 +1,7 @@
 import os
 from lxml import etree
 import time
+import threading
 
 
 class MPDManager:
@@ -30,6 +31,7 @@ class MPDManager:
         self.adaptation_set = None
         self.representations = {}  # Store representations dynamically
         self.initialized = False
+        self.lock = threading.Lock()
 
     def setup_adaptation_set(self):
         self.adaptation_set = etree.SubElement(
@@ -89,7 +91,10 @@ class MPDManager:
         """
         Save the current MPD to the output directory
         """
-        mpd_path = os.path.join(self.output_directory, "manifest.mpd")
-        mpd_content = etree.tostring(self.mpd_root, pretty_print=True, xml_declaration=True, encoding="UTF-8")
-        with open(mpd_path, "wb") as f:
-            f.write(mpd_content)
+        with self.lock:
+            mpd_path = os.path.join(self.output_directory, "manifest.mpd")
+            tmp_mpd_path = os.path.join(self.output_directory, "tmp.mpd")
+            mpd_content = etree.tostring(self.mpd_root, pretty_print=True, xml_declaration=True, encoding="UTF-8")
+            with open(tmp_mpd_path, "wb") as f:
+                f.write(mpd_content)
+            os.rename(tmp_mpd_path, mpd_path)
