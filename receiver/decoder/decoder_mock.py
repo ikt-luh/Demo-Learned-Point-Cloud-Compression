@@ -1,3 +1,4 @@
+import random
 import time
 import yaml
 import threading
@@ -13,7 +14,7 @@ class Decoder:
 
         # ZeroMQ
         self.push_socket = context.socket(zmq.PUSH)
-        self.push_socket.connect("tcp://visualizer:5556")
+        self.push_socket.connect("tcp://client:5555")
 
         self.pull_socket = context.socket(zmq.PULL)
         self.pull_socket.bind("tcp://*:5555")
@@ -30,6 +31,7 @@ class Decoder:
             time.sleep(0.1)
             data = self.pull_socket.recv()
             print("Received data")
+            time.sleep(random.uniform(0.5, 0.8))
             self.push_socket.send(data)
     
 

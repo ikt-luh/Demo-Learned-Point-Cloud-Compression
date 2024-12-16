@@ -22,14 +22,13 @@ COPY package*.json ./
 RUN npm install --save three \
     && npm install --save-dev vite
 
-# Copy the rest of the project files into the container
-COPY . .
+RUN npm install -g concurrently
 
 # Install Python dependencies
+COPY ./requirements.txt ./requirements.txt
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Install `concurrently` globally to manage multiple processes
-RUN npm install -g concurrently
+COPY . . 
 
 # Expose the development server port and backend port
 EXPOSE 5173 8080

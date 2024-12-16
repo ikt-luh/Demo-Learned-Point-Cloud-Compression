@@ -1,3 +1,5 @@
+import time
+import sys
 import zmq
 import websockets
 import numpy as np
@@ -18,7 +20,8 @@ class Backend:
         """Listen for incoming data on ZeroMQ and pass it to the WebSocket."""
         while True:
             data = self.pull_socket.recv()
-            print("Data received")  # Blocking call to receive data
+            print("Data received {}".format(time.time()))  # Blocking call to receive data
+            sys.stdout.flush()
             self.pack_and_send(data)
 
     async def websocket_handler(self, websocket, path):
@@ -63,5 +66,6 @@ class Backend:
 
 
 if __name__ == "__main__":
+    print("Starting backend")
     backend = Backend()
     asyncio.run(backend.run())
