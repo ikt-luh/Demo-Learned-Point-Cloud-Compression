@@ -8,7 +8,7 @@ import numpy as np
 import torch
 
 class Encoder:
-    def __init__(self, max_queue_size=60, target_fps=3, gop_size=3, segment_duration=2.0):
+    def __init__(self, max_queue_size=60, target_fps=3, gop_size=3, segment_duration=1.0):
         context = zmq.Context()
 
         # ZeroMQ
