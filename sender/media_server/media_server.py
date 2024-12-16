@@ -1,3 +1,4 @@
+import sys
 from datetime import datetime
 import math
 import time
@@ -57,6 +58,7 @@ class StreamingServer:
         timestamp = datetime.now().timestamp() - shared_epoch
         number = math.floor((timestamp) / segment_duration) 
         print("Segment Number: {}".format(number))
+        sys.stdout.flush()
         for key, item in data.items():
             segment_folder = os.path.join(self.output_directory, "ID{}".format(key))
             segment_path = os.path.join(segment_folder, "segment-{:015d}.bin".format(number))
