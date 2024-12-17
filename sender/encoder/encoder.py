@@ -47,7 +47,6 @@ class Encoder():
         self.codec.to(self.device)
 
 
-
     def receive_data(self):
         t_start = None
         batch = []
@@ -94,7 +93,6 @@ class Encoder():
         print(str(( (len(bits[0][0]) + len(bits[1][0])) * 8) / input_pc.shape[0]) + " bpp")
         t1 = time.time()
         print(t1 - t0)
-
             
         return pickle.dumps(data)
 

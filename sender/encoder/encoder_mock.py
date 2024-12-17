@@ -1,3 +1,4 @@
+import sys
 import time
 import yaml
 import threading
@@ -80,6 +81,8 @@ class Encoder:
         serialized_data = self.serialize_data(compressed_data)
 
         # Sending
+        print(time.time())
+        sys.stdout.flush()
         self.push_socket.send(serialized_data)
 
     def sample(self, batch):
@@ -115,7 +118,7 @@ class Encoder:
         data["segment_duration"] = self.segment_duration
         data["frame_rate"] = self.target_fps
         for i in range(3):
-            data[i] = "AbCd" * 1000 * (i+1)
+            data[i] = sampled_batch
 
         return data  # Replace with actual compression logic
 
