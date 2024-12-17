@@ -81,8 +81,6 @@ class Encoder:
         serialized_data = self.serialize_data(compressed_data)
 
         # Sending
-        print(time.time())
-        sys.stdout.flush()
         self.push_socket.send(serialized_data)
 
     def sample(self, batch):

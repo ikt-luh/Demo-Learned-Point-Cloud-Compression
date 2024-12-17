@@ -105,7 +105,7 @@ class Capturer():
     def setup_zed(self):
         """
         """
-        init = sl.InitParameters(depth_mode=sl.DEPTH_MODE.ULTRA,
+        init = sl.InitParameters(depth_mode=sl.DEPTH_MODE.QUALITY,
                 coordinate_units=sl.UNIT.METER,
                 coordinate_system=sl.COORDINATE_SYSTEM.RIGHT_HANDED_Y_UP)
         init.camera_resolution = sl.RESOLUTION.HD1080

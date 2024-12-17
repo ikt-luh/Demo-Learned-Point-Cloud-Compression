@@ -29,7 +29,8 @@ class StreamingServer:
         self.port = port
         self.segment_duration = segment_duration
         self.segment_buffer = [] 
-        self.lock = threading.Lock()
+        self.buffer_lock = threading.Lock()
+        self.io_lock = threading.Lock()
         
         self.cleanup_queue = []
 
@@ -53,7 +54,7 @@ class StreamingServer:
             print("Received {}".format(time.time()), flush=True)
             data = self.deserialize_data(serialized_data)
 
-            with self.lock:
+            with self.buffer_lock:
                 self.segment_buffer.append(data)
 
 
@@ -70,7 +71,7 @@ class StreamingServer:
             current_segment = math.floor(timestamp/self.segment_duration)
 
             # Process and flush the current segment
-            with self.lock:
+            with self.buffer_lock:
                 if len(self.segment_buffer) > 0:
                     data = self.segment_buffer.pop(0)
                 else:
@@ -104,7 +105,7 @@ class StreamingServer:
         """
         _ = data.pop("timestamp", None)
         _ = data.pop("segment_duration", None)
-        _ = data.pop("frame_rate", None)
+        _ = data.pop("frame_ratee", None)
 
         segment_number = math.floor((timestamp) / self.segment_duration)
 
@@ -115,7 +116,7 @@ class StreamingServer:
             os.makedirs(segment_folder, exist_ok=True)
 
             # Write the segment to disk
-            with self.lock:
+            with self.io_lock:
                 with open(tmp_segment_path, "wb") as f:
                     pickle.dump(item, f)
                 os.rename(tmp_segment_path, segment_path)
