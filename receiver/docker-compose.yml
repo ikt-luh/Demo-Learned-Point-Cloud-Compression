@@ -31,11 +31,13 @@ services:
     container_name: visualizer
     ports:
       - "5173:5173"
-      #- "8080:8080"
+      - "8765:8765"
     environment:
       - ZMQ_PULL_SOCKET="tcp://client:5556"
     networks:
       - receiver_network
+    stdin_open: true
+    tty: true
 
 networks:
   receiver_network:

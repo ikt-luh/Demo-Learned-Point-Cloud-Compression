@@ -1,74 +1,30 @@
-import time
-import sys
-import zmq
-import pickle
-import websockets
-import numpy as np
-import threading
 import asyncio
+import websockets
+import zmq
+import zmq.asyncio
 
-class Backend:
-    def __init__(self):
-        # ZeroMQ
-        self.context = zmq.Context()
-        self.pull_socket = self.context.socket(zmq.PULL)
-        self.pull_socket.bind("tcp://*:5556")  # Bind to receive data
+# Initialize ZeroMQ context and socket (PULL for receiving data)
+context = zmq.asyncio.Context()
+zmq_socket = context.socket(zmq.PULL)
+zmq_socket.bind("tcp://*:5556")  # Connect to the ZeroMQ source
 
-        # WebSocket
-        self.websocket = None  # Placeholder for the single client connection
-
-    def zmq_listener(self):
-        """Listen for incoming data on ZeroMQ and pass it to the WebSocket."""
+async def handler(websocket):
+    print("Client connected")
+    try:
         while True:
-            data = self.pull_socket.recv()
-            data = pickle.loads(data)
-            print("Data received {}".format(time.time()))  # Blocking call to receive data
-            print("Timestamp {}".format(time.time() - data[0]["timestamp"]))  # Blocking call to receive data
-            sys.stdout.flush()
-            self.pack_and_send(data)
+            # Wait for message
+            data = await zmq_socket.recv()
+            
+            # Send  data to WebSocket client
+            print("Bridging data", flush=True)
+            await websocket.send(data)  # Assuming the data is a string, adjust as needed
 
-    async def websocket_handler(self, websocket, path):
-        """Handle WebSocket communication (single client)."""
-        self.websocket = websocket
-        try:
-            for message in websocket:  # Handle incoming messages if needed
-                print(f"Client message: {message}")
-        except websockets.ConnectionClosed:
-            print("WebSocket client disconnected")
-        finally:
-            self.websocket = None
+    except websocket.exceptions.ConnectionClosed:
+        print("Client disconnected")
 
-    def pack_and_send(self, data):
-        """Pack the data and send it to the WebSocket client."""
-        if self.websocket is None:
-            return  # No active WebSocket client, drop the data
+async def main():
+    async with websockets.serve(handler, "0.0.0.0", 8765):
+        await asyncio.Future()  # Keep the server running
 
-        # Simulate unpacking and processing data
-        points = np.random.rand(100, 3)  # Example: generate fake points
-        colors = np.random.randint(0, 255, (100, 3))  # Example: generate fake colors
-
-        # Flatten arrays and convert to byte format
-        points_bytes = points.astype(np.float32).tobytes()
-        colors_bytes = colors.astype(np.uint8).tobytes()
-        packed_data = points_bytes + colors_bytes
-
-        # Send data
-        self.websocket.send(packed_data)
-
-    async def run(self):
-        """Run both ZeroMQ and WebSocket servers."""
-        # Start ZeroMQ listener in a separate thread
-        zmq_thread = threading.Thread(target=self.zmq_listener, daemon=True)
-        zmq_thread.start()
-
-        # Start WebSocket server (blocking)
-        start_server = websockets.serve(self.websocket_handler, "0.0.0.0", 8080)
-
-        await start_server
-        await asyncio.Future()
-
-
-if __name__ == "__main__":
-    print("Starting backend")
-    backend = Backend()
-    asyncio.run(backend.run())
+# Run the WebSocket server
+asyncio.run(main())
