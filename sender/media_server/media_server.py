@@ -30,6 +30,8 @@ class StreamingServer:
         self.segment_duration = segment_duration
         self.segment_buffer = [] 
         self.lock = threading.Lock()
+        
+        self.cleanup_queue = []
 
     def start_http_server(self):
         """
@@ -71,9 +73,10 @@ class StreamingServer:
             with self.lock:
                 if len(self.segment_buffer) > 0:
                     data = self.segment_buffer.pop(0)
-                    threading.Thread(target=self.handle_data, args=(data, current_segment)).start()
                 else:
                     print("Empty buffer, waiting for data", flush=True)
+            threading.Thread(target=self.handle_data, args=(data, current_segment)).start()
+            self.cleanup_queue.append(current_segment)
 
             sleep_time = max(0, self.segment_duration - (datetime.now().timestamp() - timestamp))
             time.sleep(sleep_time)
@@ -82,17 +85,17 @@ class StreamingServer:
     def cleanup_segments(self):
         num_reps = 3 # TODO
         while True:
-            timestamp = datetime.now().timestamp()
-            old_segment_number = math.floor((timestamp) / self.segment_duration) - 10
+            if len(self.cleanup_queue) > 10:
+                old_segment_number = self.cleanup_queue.pop(0)
+                for key in range(num_reps):
+                    segment_folder = os.path.join(self.output_directory, f"ID{key}")
+                    segment_path = os.path.join(segment_folder, f"segment-{old_segment_number:015d}.bin")
+                    if os.path.exists(segment_path):
+                        os.remove(segment_path)
 
-            for key in range(num_reps):
-                segment_folder = os.path.join(self.output_directory, f"ID{key}")
-                segment_path = os.path.join(segment_folder, f"segment-{old_segment_number:015d}.bin")
-                if os.path.exists(segment_path):
-                    os.remove(segment_path)
+            else:
+                time.sleep(1)
 
-            sleep_time = max(0, self.segment_duration - (datetime.now().timestamp() - timestamp))
-            time.sleep(sleep_time)
 
 
     def handle_data(self, data, timestamp):
