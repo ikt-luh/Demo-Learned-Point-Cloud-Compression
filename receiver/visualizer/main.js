@@ -54,7 +54,7 @@ const quaternion = new THREE.Quaternion(); // To rotate based on the headset's o
     }
 
     // Apply scaling to fit the point cloud in the camera's view
-    const scaleFactor = 0.001;  // Scale down the point cloud
+    const scaleFactor = 0.002;  // Scale down the point cloud
     for (let i = 0; i < float32Array.length; i++) {
         float32Array[i] *= scaleFactor; // Scale coordinates
     }
@@ -63,7 +63,7 @@ const quaternion = new THREE.Quaternion(); // To rotate based on the headset's o
     if (!dynamicGeometry) {
         dynamicGeometry = new THREE.BufferGeometry();
         const material = new THREE.PointsMaterial({
-            size: 0.005,
+            size: 0.01,
             vertexColors: true,
         });
         const points = new THREE.Points(dynamicGeometry, material);
@@ -84,59 +84,34 @@ const quaternion = new THREE.Quaternion(); // To rotate based on the headset's o
 
 
 
+let initialCenter = null; // To store the center for the first frame
+
 // Center the point cloud in front of the user
 function centerPointCloud() {
     if (!dynamicGeometry) return;
 
-    // Compute bounding box and center
-    dynamicGeometry.computeBoundingBox();
-    const box = dynamicGeometry.boundingBox;
-    const center = new THREE.Vector3();
-    box.getCenter(center);
+    if (initialCenter === null) {
+        // Compute bounding box and center only for the first frame
+        dynamicGeometry.computeBoundingBox();
+        const box = dynamicGeometry.boundingBox;
+        initialCenter = new THREE.Vector3();
+        box.getCenter(initialCenter);
 
-    // Translate geometry to center it
-    dynamicGeometry.translate(-center.x, -center.y, -center.z);
-}
-// Add VR Controller Input
-function setupController() {
-    //const controller = renderer.xr.getController(0);
-    //scene.add(controller);
+        console.log("Initial center computed:", initialCenter);
+    }
 
-    //// Listen for controller button press
-    //controller.addEventListener('selectstart', () => {
-    //    centerPointCloud();
-    //});
+    // Translate geometry using the precomputed center
+    dynamicGeometry.translate(-initialCenter.x, -initialCenter.y, -initialCenter.z);
 }
 
-// Handle joystick input for movement
-function handleMovement() {
-    //const session = renderer.xr.getSession();
-    //if (!session) return;
-
-    //// Loop through input sources (e.g., controllers)
-    //session.inputSources.forEach((inputSource) => {
-    //    if (inputSource.gamepad) {
-    //        const axes = inputSource.gamepad.axes; // Get joystick axes
-
-    //        // Move forward/backward (axes[1]) and left/right (axes[0])
-    //        direction.set(axes[0] * movementSpeed, 0, -axes[1] * movementSpeed);
-    //        direction.applyQuaternion(camera.quaternion); // Rotate direction by camera's orientation
-
-    //        // Update camera position
-    //        camera.position.add(direction);
-    //    }
-    //});
-}
 
 
 // Animate and Render Scene
 function animate() {
     renderer.setAnimationLoop(() => {
-        handleMovement(); // Handle joystick input
         renderer.render(scene, camera);
     });
 }
 
 // Start Preloading Models, Setup Controllers, and Animation
-setupController();
 animate();

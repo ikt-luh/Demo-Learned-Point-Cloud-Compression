@@ -28,9 +28,8 @@ class Decoder:
         Main loop
         """
         while True:
-            time.sleep(0.1)
             data = self.pull_socket.recv()
-            print("Received data")
+            print("Received data", flush=True)
             time.sleep(random.uniform(0.5, 0.8))
             self.push_socket.send(data)
     

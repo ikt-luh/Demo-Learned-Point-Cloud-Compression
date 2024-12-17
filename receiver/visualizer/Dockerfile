@@ -1,5 +1,5 @@
 # Base image for Ubuntu
-FROM ubuntu:20.04
+FROM ubuntu:22.04
 
 # Prevent interactive prompts during installation
 ARG DEBIAN_FRONTEND=noninteractive
@@ -20,7 +20,8 @@ COPY package*.json ./
 
 # Install Node.js dependencies
 RUN npm install --save three \
-    && npm install --save-dev vite
+    && npm install --save-dev vite \
+    && npm install --save mqtt
 
 RUN npm install -g concurrently
 
@@ -31,7 +32,8 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 COPY . . 
 
 # Expose the development server port and backend port
-EXPOSE 5173 8080
+EXPOSE 5173
 
 # Default command to run both the Python script and Vite development server
-CMD ["sh", "-c", "concurrently --kill-others \"npx vite --host 0.0.0.0 --port 5173\" \"python3 /app/backend.py\""]
+#CMD ["sh", "-c", "concurrently --kill-others \"npx vite --host 0.0.0.0 --port 5173\" \"python3 /app/backend.py\""]
+CMD ["sh", "-c", "python3 backend.py & npx vite --host 0.0.0.0 --port 5173"]
