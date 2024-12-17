@@ -127,7 +127,7 @@ If it is, use reverse port forwarding to make the browser accesible
 ```
 adb reverse tcp:5173 tcp:5173
 adb reverse tcp:8765 tcp:8765
-adb reverse tcp:8765 tcp:8765
+adb forward tcp:8765 tcp:8765
 ```
 
 
