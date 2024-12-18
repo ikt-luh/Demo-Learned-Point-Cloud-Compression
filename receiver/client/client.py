@@ -36,7 +36,6 @@ class StreamingClient:
         self.visualizer_socket.connect("tcp://visualizer:5556")
 
         # Locks for thread safety
-        self.buffer_lock = threading.Lock()
         self.playout_buffer_lock = threading.Lock()
         self.playout_buffer = []  # Holds data received from the decoder
 
@@ -117,10 +116,6 @@ class StreamingClient:
 
             packet = self.prepare_for_rendering(decoded_data)
 
-            with self.playout_buffer_lock:
-                #self.playout_buffer.append(packet)
-                pass
-
 
     def visualizer_sender(self):
         """Sends processed data to the visualizer."""
@@ -133,7 +128,8 @@ class StreamingClient:
             if self.playout_buffer:
                 with self.playout_buffer_lock:
                     data = self.playout_buffer.pop(0)
-                    self.visualizer_socket.send(data)
+
+                self.visualizer_socket.send(data)
             
             # Sleep to maintain target fps
             sleep_time = max(0, (1/self.target_fps) - (datetime.now().timestamp() - timestamp))
