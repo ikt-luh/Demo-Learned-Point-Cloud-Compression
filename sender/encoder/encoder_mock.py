@@ -10,17 +10,14 @@ import torch
 
 class Encoder:
     def __init__(self, max_queue_size=60, target_fps=3, gop_size=3, segment_duration=1.0):
+        # ZeroMQ
         context = zmq.Context()
 
-        # ZeroMQ
         self.push_socket = context.socket(zmq.PUSH)
         self.push_socket.connect("tcp://mediaserver:5556")
 
         self.pull_socket = context.socket(zmq.PULL)
         self.pull_socket.bind("tcp://*:5555")
-
-        # Bounded queue for frame buffering
-        self.queue = queue.Queue(maxsize=max_queue_size)
 
         # GoP and Framerate Handling
         self.target_fps = target_fps
