@@ -5,7 +5,7 @@ import torch
 import numpy as np
 import MinkowskiEngine as ME
 import threading
-from concurrent.futures import ThreadPoolExecutor
+from bitstream import BitStream
 
 import utils
 from unified.model import model
@@ -66,8 +66,9 @@ class CompressionPipeline:
 
         # Step 7 (Bitstream Writing)
         t_7 = 0.0
-        concatenated_bitstream, t_7 = self.make_bitstream(y_strings, z_strings, y_shapes, z_shapes, points_streams, k)
+        byte_array, t_7 = self.make_bitstream(y_strings, z_strings, y_shapes, z_shapes, points_streams, k, q)
 
+        num_points = pointclouds.C.shape[0]
         t_sum = t_1 + t_2 + t_3 + t_4 + t_5 + t_6 + t_7
         print("Step 1 (Analysis): \t\t {:.3f} seconds".format(t_1), flush=True)
         print("Step 2 (Hyper Analysis): \t {:.3f} seconds".format(t_2), flush=True)
@@ -78,6 +79,8 @@ class CompressionPipeline:
         print("Step 7 (Bitstream Writer): \t {:.3f} seconds".format(t_7), flush=True)
         print("-----------------------------------------------", flush=True)
         print("Encoding Total: \t\t\t {:.3f} seconds".format(t_sum), flush=True)
+        print("Bitstream length: \t\t {} bits".format(len(byte_array * 8)), flush=True)
+        print("BPP: \t\t\t\t {:.3f}".format(len(byte_array * 8) / num_points), flush=True)
         print("-----------------------------------------------", flush=True)
 
         return data # TODO: Mock for now 
@@ -146,7 +149,7 @@ class CompressionPipeline:
         z_feats = [feat.t().unsqueeze(0) for feat in z_feats]
         
         z_strings, z_hats = [], []
-        for z_feat, shape in zip(z_feats, shapes):
+        for z_feat, shape in zip(z_feats, z_shapes):
             z_string = self.compression_model.entropy_model.entropy_bottleneck.compress(z_feat)
             z_strings.append(z_string)
             z_hat = self.compression_model.entropy_model.entropy_bottleneck.decompress(z_string, shape)
@@ -234,22 +237,49 @@ class CompressionPipeline:
         t_step = t1 - t0
         return point_bitstreams, t_step
 
-    def make_bitstream(self, y_strings, z_strings, y_shapes, z_shapes, points_streams, k):
+    def make_bitstream(self, y_strings, z_strings, y_shapes, z_shapes, points_streams, ks, q):
+        """
+        Write the bitstream
+
+        Structure:
+        [ num_frames (32) | q_g (32) | q_g (32) | [frame1] ... frame[N] ]
+
+        Frame:  [ Header (128 bits) | Content (whatever) ]
+            Header: [y_shape (32) | len_points (32) | len_y (32) | len_z (32) | k1,k2,k3 (96)] 
+            Content: [ points | z_string | y_string ] 
+        """
         t0 = time.time()
 
-        
+        stream = BitStream()
+
+        num_frames = len(y_strings)
+        stream.write(num_frames, np.int32)
+        stream.write(q[0, 0].cpu(), np.int32)
+        stream.write(q[0, 1].cpu(), np.int32)
+
+        for i in range(num_frames):
+            points = points_streams[i]
+            y_string, z_string = y_strings[i], z_strings[i]
+            y_shape, z_shape = y_shapes[i], z_shapes[i]
+            k = ks[i]
+            q = q
+
+            # Header
+            stream.write(y_shape, np.int32)
+            stream.write(len(points), np.int32)
+            stream.write(len(y_string), np.int32)
+            stream.write(len(z_string), np.int32)
+            for k_level in k:
+                stream.write(k, np.int32)
+
+            # Content
+            stream.write(points)
+            stream.write(z_string[0])
+            stream.write(y_string[0])
+
+        bit_string = stream.__str__()
+        byte_array = bytes(int(bit_string[i:i+8], 2) for i in range(0, len(bit_string), 8))
 
         t1 = time.time()
         t_step = t1 - t0
-        return datastream
-
-
-# Example usage
-if __name__ == "__main__":
-    data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]  # Example input data
-    pipeline = CompressionPipeline(batch_size=4, frame_size=10)
-
-    # Multiple compressions in a row
-    for _ in range(3):
-        bitstream = pipeline.compress(data)
-        print("Compression complete. Output:", bitstream)
+        return byte_array, t_step

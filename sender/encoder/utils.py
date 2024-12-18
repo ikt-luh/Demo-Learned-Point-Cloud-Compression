@@ -180,3 +180,5 @@ def gpcc_encode(points, tmp_dir, bin_dir):
     # Clean up
     os.remove(tmp_dir)
     os.remove(bin_dir)
+
+    return data
