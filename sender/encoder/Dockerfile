@@ -24,6 +24,13 @@ RUN sed -i '1 i\#include <thrust/execution_policy.h>' src/3rdparty/concurrent_un
     && sed -i '1 i\#include <thrust/execution_policy.h>\n#include <thrust/reduce.h>\n#include <thrust/sort.h>' src/spmm.cu
 RUN python3 setup.py install --force_cuda --blas=openblas
 
+# Build G-PCC
+WORKDIR /app/dependencies
+RUN git clone https://github.com/MPEGGroup/mpeg-pcc-tmc13.git && \
+    mkdir /app/dependencies/mpeg-pcc-tmc13/build && \
+    cd /app/dependencies/mpeg-pcc-tmc13/build && \
+    cmake /app/dependencies/mpeg-pcc-tmc13 && \
+    make
 
 # Copy application code
 COPY . /app

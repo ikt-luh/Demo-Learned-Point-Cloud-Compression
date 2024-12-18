@@ -8,6 +8,8 @@ import pickle
 import numpy as np
 import torch
 
+from codec_single import CompressionPipeline
+
 class Encoder:
     def __init__(self, max_queue_size=60, target_fps=3, gop_size=3, segment_duration=1.0):
         # ZeroMQ
@@ -31,6 +33,8 @@ class Encoder:
         self.worker_thread = threading.Thread(target=self.worker)
         self.worker_thread.daemon = True
         self.worker_thread.start()
+
+        self.codec = CompressionPipeline()
 
     def run(self):
         batch = []
@@ -112,14 +116,15 @@ class Encoder:
         data["timestamp"] = sampled_batch[0]["timestamp"]
         data["segment_duration"] = self.segment_duration
         data["frame_rate"] = self.target_fps
-        for i in range(3):
-            data[i] = self.compress(sampled_batch)
+
+        compressed_data = self.codec.compress(sampled_batch)
+         
+        # TODO: Handle compressed data and data
+        for i, item in enumerate(compressed_data):
+            compressed_data[i] = item
 
         return data  # Replace with actual compression logic
 
-
-    def compress(self, data):
-        return data
         
 
     def serialize_data(self, data):

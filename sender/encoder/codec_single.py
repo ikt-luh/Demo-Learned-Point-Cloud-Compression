@@ -1,29 +1,41 @@
+import os
+import yaml
+import time
 import torch
+import numpy as np
+import MinkowskiEngine as ME
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
+import utils
+from unified.model import model
+
 class CompressionPipeline:
-    def __init__(self, batch_size, frame_size):
-        self.batch_size = batch_size
-        self.frame_size = frame_size
-
+    def __init__(self):
         # Define GPU device
-        self.gpu_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        # Placeholder for outputs of each step
-        self.analysis_output = None
-        self.geometry_output = None
-        self.hyper_analysis_output = None
-        self.entropy_bottleneck_output = None
-        self.hyper_synthesis_output = None
-        self.gaussian_bottleneck_output = None
-        self.bitstream_output = None
+        # Model
+        base_path = "./unified/results/"
+        self.compression_model = self.load_model(base_path)
+        
+    def load_model(self, base_path):
+        model_name = "model_inverse_nn"
+        config_path = os.path.join(base_path, model_name, "config.yaml")
+        weights_path = os.path.join(base_path, model_name, "weights.pt")
 
-        # Thread pool for managing parallel tasks
-        self.executor = ThreadPoolExecutor(max_workers=6)
+        with open(config_path, "r") as file:
+            config = yaml.safe_load(file)
 
-        # Lock to ensure GPU is accessed serially
-        self.gpu_lock = threading.Lock()
+        compression_model = model.ColorModel(config["model"])
+        compression_model.load_state_dict(torch.load(weights_path))
+
+        compression_model.to(self.device)
+        compression_model.update()
+        compression_model.eval()
+
+        return compression_model
+
 
     def compress(self, data):
         """
@@ -31,107 +43,205 @@ class CompressionPipeline:
         Runs all steps from analysis to bitstream writing.
         Supports multiple calls without conflict.
         """
-        # Reset output states for each compress call
-        self.analysis_output = None
-        self.geometry_output = None
-        self.hyper_analysis_output = None
-        self.entropy_bottleneck_output = None
-        self.hyper_synthesis_output = None
-        self.gaussian_bottleneck_output = None
-        self.bitstream_output = None
+        pointclouds, sideinfo = self.unpack_batch(data)
 
-        # Step 1: Analysis (GPU-bound) - starts immediately
-        threading.Thread(target=self.analysis_step, args=(data,)).start()
+        # Step 1 (Analysis)
+        y, k, y_points, t_1 = self.analysis_step(pointclouds) 
 
-        # Step 2, 3, 4 (Batch processing)
-        batch_thread = threading.Thread(target=self.batch_processing, args=(data,))
-        batch_thread.start()
+        # Step 2 (Hyper Analysis)
+        z, t_2 = self.hyper_analysis_step(y)
+        
+        # Step 3 (Factorized Entropy Model)
+        z_hat, z_strings, z_shapes, z_points, t_3 = self.factorized_model_step(z)
 
-        # Wait for all processing to complete
-        batch_thread.join()
+        # Step 4 (Hyper Synthesis)
+        gaussian_params, t_4 = self.hyper_synthesis_step(z_hat)
 
-        # Step 5, 6, and 7 (GPU and CPU-based operations)
-        self.hyper_synthesis_step()  # Step 5 (GPU-bound)
-        self.gaussian_bottleneck_step()  # Step 6 (CPU-bound)
-        self.bitstream_writer_step()  # Step 7 (CPU-bound)
+        # Step 5 (Gaussian Entropy Model)
+        q = torch.tensor([[1,1]], dtype=torch.float, device=self.device) # TODO: Make a parameter and add support for multiple q's
+        y_strings, y_shapes, t_5 = self.gaussian_model_step(y, y_points, q, gaussian_params)
 
-        return self.bitstream_output
+        # Step 6 (Geometry Compression with G-PCC)
+        points_streams, t_6 = self.geometry_compression_step(y_points)
+
+        # Step 7 (Bitstream Writing)
+        t_7 = 0.0
+        concatenated_bitstream, t_7 = self.make_bitstream(y_strings, z_strings, y_shapes, z_shapes, points_streams, k)
+
+        t_sum = t_1 + t_2 + t_3 + t_4 + t_5 + t_6 + t_7
+        print("Step 1 (Analysis): \t\t {:.3f} seconds".format(t_1), flush=True)
+        print("Step 2 (Hyper Analysis): \t {:.3f} seconds".format(t_2), flush=True)
+        print("Step 3 (Fact. Entr. Model): \t {:.3f} seconds".format(t_3), flush=True)
+        print("Step 4 (Hyper Synthesis): \t {:.3f} seconds".format(t_4), flush=True)
+        print("Step 5 (Gaussian Model): \t {:.3f} seconds".format(t_5), flush=True)
+        print("Step 6 (G-PCC): \t\t\t {:.3f} seconds".format(t_6), flush=True)
+        print("Step 7 (Bitstream Writer): \t {:.3f} seconds".format(t_7), flush=True)
+        print("-----------------------------------------------", flush=True)
+        print("Encoding Total: \t\t\t {:.3f} seconds".format(t_sum), flush=True)
+        print("-----------------------------------------------", flush=True)
+
+        return data # TODO: Mock for now 
+
+
+    def unpack_batch(self, batch):
+        """
+        Unpacks the batch to receive torch point cloud and a list of side-info
+        """
+        sideinfo = []
+
+        points, colors = [], []
+        for item in batch:
+            item_points = item.pop("points")
+            item_colors = item.pop("colors")
+            sideinfo.append(item)
+            points.append(item_points)
+            colors.append(item_colors)
+
+        # From list to torch tensors in the expected shape
+        points, colors = utils.stack_tensors(points, colors)
+        colors = torch.cat([torch.ones((colors.shape[0], 1)), colors], dim=1)
+        points = points.to(self.device, dtype=torch.float)
+        colors = colors.to(self.device, dtype=torch.float)
+
+        pointcloud = ME.SparseTensor(
+            coordinates=points,
+            features=colors,
+            device=self.device
+        )
+        return pointcloud, sideinfo
+
 
     def analysis_step(self, data):
         """ Step 1: Analysis (GPU) """
-        with self.gpu_lock:  # Ensure only one GPU task at a time
-            print("Starting analysis...")
-            self.analysis_output = self.analyze_data(data)
-            print("Analysis complete")
+        t0 = time.time()
+        y, k = self.compression_model.g_a(data)
+        torch.cuda.synchronize()
 
-    def batch_processing(self, data):
-        """ Step 2 (Geometry compression), Step 3 (Hyper analysis), Step 4 (Entropy bottleneck) """
-        print("Starting batch processing...")
+        y = utils.sort_tensor(y)
+        y_points = utils.get_points_per_batch(y, batch_dim=False)
 
-        # Step 2: Geometry compression (CPU)
-        if self.analysis_output is not None:
-            self.geometry_output = self.geometry_compression(self.analysis_output)
+        t1 = time.time()
+        t_step = t1 - t0
+        return y, k, y_points, t_step
 
-        # Step 3: Hyper analysis (GPU)
-        if self.analysis_output is not None:
-            self.hyper_analysis_output = self.hyper_analysis(self.analysis_output)
 
-        # Step 4: Entropy bottleneck (CPU)
-        if self.hyper_analysis_output is not None:
-            self.entropy_bottleneck_output = self.entropy_bottleneck(self.hyper_analysis_output)
+    def hyper_analysis_step(self, y):
+        """ Step 2: Hyper Analysis """
+        t0 = time.time()
+        z = self.compression_model.entropy_model.h_a(y)
+        torch.cuda.synchronize()
+        t1 = time.time()
+        t_step = t1 - t0
+        return z, t_step
 
-        print("Batch processing complete")
 
-    def hyper_synthesis_step(self):
-        """ Step 5: Hyper synthesis (GPU) """
-        with self.gpu_lock:  # Ensure only one GPU task at a time
-            print("Starting hyper synthesis...")
-            if self.hyper_analysis_output is not None:
-                self.hyper_synthesis_output = self.hyper_synthesis(self.hyper_analysis_output)
-            print("Hyper synthesis complete")
+    def factorized_model_step(self, z):
+        """ Step 3: Factorized Entropy Model """
+        t0 = time.time()
 
-    def gaussian_bottleneck_step(self):
-        """ Step 6: Gaussian bottleneck (CPU) """
-        print("Starting gaussian bottleneck...")
-        if self.analysis_output is not None and self.hyper_synthesis_output is not None:
-            self.gaussian_bottleneck_output = self.gaussian_bottleneck(self.analysis_output, self.hyper_synthesis_output)
-        print("Gaussian bottleneck complete")
+        z = utils.sort_tensor(z)
 
-    def bitstream_writer_step(self):
-        """ Step 7: Bitstream writer (CPU) """
-        print("Starting bitstream writer...")
-        if self.entropy_bottleneck_output is not None and self.gaussian_bottleneck_output is not None and self.geometry_output is not None:
-            self.bitstream_output = self.write_bitstream(self.entropy_bottleneck_output, self.gaussian_bottleneck_output, self.geometry_output)
-        print("Bitstream writing complete")
+        z_feats = utils.get_features_per_batch(z)
+        z_shapes = [[feat.shape[0]] for feat in z_feats]
+        z_feats = [feat.t().unsqueeze(0) for feat in z_feats]
+        
+        z_strings, z_hats = [], []
+        for z_feat, shape in zip(z_feats, shapes):
+            z_string = self.compression_model.entropy_model.entropy_bottleneck.compress(z_feat)
+            z_strings.append(z_string)
+            z_hat = self.compression_model.entropy_model.entropy_bottleneck.decompress(z_string, shape)
+            z_hats.append(z_hat[0].t())
 
-    # Example implementations for each step
-    def analyze_data(self, data):
-        # Perform the GPU analysis step
-        return torch.tensor(data).to(self.gpu_device)
+        z_points = utils.get_points_per_batch(z)
 
-    def geometry_compression(self, data):
-        # Perform geometry compression on a frame (CPU-based)
-        return data  # For simplicity, this just returns the data unmodified
+        z_hat = ME.SparseTensor(
+            coordinates=z.C.clone(),
+            features=torch.cat(z_hats, dim=0),
+            tensor_stride=32,
+            device=self.device
+        )
 
-    def hyper_analysis(self, data):
-        # Perform hyper analysis (GPU-based)
-        return torch.tensor(data).to(self.gpu_device)
+        t1 = time.time()
+        t_step = t1 - t0
+        return z_hat, z_strings, z_shapes, z_points, t_step
 
-    def entropy_bottleneck(self, data):
-        # Perform entropy bottleneck compression (CPU-based)
-        return data  # Placeholder: this would be a compression step
 
-    def hyper_synthesis(self, hyper_analysis_output):
-        # Perform hyper synthesis on the GPU
-        return hyper_analysis_output * 0.5  # Placeholder: modify the output
+    def hyper_synthesis_step(self, z_hat):
+        t0 = time.time()
 
-    def gaussian_bottleneck(self, analysis_output, hyper_synthesis_output):
-        # Perform Gaussian bottleneck compression (CPU-based)
-        return analysis_output * hyper_synthesis_output  # Placeholder: modify the output
+        gaussian_params = self.compression_model.entropy_model.h_s(z_hat)
 
-    def write_bitstream(self, entropy_bottleneck_output, gaussian_bottleneck_output, geometry_output):
-        # Combine the outputs and write to the bitstream (CPU-based)
-        return b"bitstream_data"  # Placeholder for actual bitstream data
+        torch.cuda.synchronize()
+        t1 = time.time()
+        t_step = t1 - t0
+        return gaussian_params, t_step
+
+
+    def gaussian_model_step(self, y, y_points, q, gaussian_params):
+        t0 = time.time()
+        
+        gaussian_params_feats = gaussian_params.features_at_coordinates(y.C.float())
+
+        gaussian_params = utils.get_features_per_batch(gaussian_params_feats, y.C)
+        y_feats = utils.get_features_per_batch(y)
+
+        y_strings, shapes = [], []
+        for y_feat, gaussian_param in zip(y_feats, gaussian_params):
+            scales_hat, means_hat = gaussian_param.chunk(2, dim=1)
+            scales_hat = scales_hat.t().unsqueeze(0)
+            means_hat = means_hat.t().unsqueeze(0)
+
+            # Scale NN
+            scale = self.compression_model.entropy_model.scale_nn(q) + self.compression_model.entropy_model.eps
+            scale = scale[:].t().unsqueeze(0)
+
+            indexes = self.compression_model.entropy_model.gaussian_conditional.build_indexes(scales_hat * scale)
+            y_string = self.compression_model.entropy_model.gaussian_conditional.compress(
+                y_feat.t().unsqueeze(0) * scale,
+                indexes,
+                means=means_hat * scale
+            )
+
+            y_strings.append(y_string)
+            shapes.append(y_feat.shape[0])
+
+        t1 = time.time()
+        t_step = t1 - t0
+
+        return y_strings, shapes,t_step
+
+
+    def geometry_compression_step(self, y_points):
+        t0 = time.time()
+
+        base_directory = "/tmp/"
+
+        timestamp = int(time.time() * 1e6)
+        # TODO: Create unique subdirectory names for threads
+        # thread_id = threading.get_ident()
+        # tmp_dir = os.path.join(base_directory, f"tmp_{thread_id}_{timestamp}_points_enc.ply")
+        # bin_dir = os.path.join(base_directory, f"tmp_{thread_id}_{timestamp}_points_bin.ply")
+
+        tmp_dir = os.path.join(base_directory, f"tmp_{timestamp}_points_enc.ply")
+        bin_dir = os.path.join(base_directory, f"tmp_{timestamp}_points_bin.ply")
+
+        point_bitstreams = []
+        for y_point in y_points:
+            point_bitstream = utils.gpcc_encode(y_point, tmp_dir, bin_dir)
+            point_bitstreams.append(point_bitstream)
+
+        t1 = time.time()
+        t_step = t1 - t0
+        return point_bitstreams, t_step
+
+    def make_bitstream(self, y_strings, z_strings, y_shapes, z_shapes, points_streams, k):
+        t0 = time.time()
+
+        
+
+        t1 = time.time()
+        t_step = t1 - t0
+        return datastream
 
 
 # Example usage

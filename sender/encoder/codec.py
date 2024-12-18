@@ -25,6 +25,27 @@ class CompressionPipeline:
         # Lock to ensure GPU is accessed serially
         self.gpu_lock = threading.Lock()
 
+        # Model
+        base_path = "./unified/results/"
+        self.model = self.load_model(base_path)
+        
+    def load_model(self, base_path):
+        model_name = "model_inverse_nn"
+        config_path = os.path.join(base_path, model_name, "config.yaml")
+        weights_path = os.path.join(base_path, model_name, "weights.pt")
+
+        with open(config_path, "r") as file:
+            config = yaml.safe_load(file)
+
+        model = model.ColorModel(config["model"])
+        model.load_state_dict(torch.load(weights_path))
+
+        model.to(self.device)
+        model.update()
+        model.eval()
+
+        return model
+
     def compress(self, data):
         """
         Main compression pipeline method.
