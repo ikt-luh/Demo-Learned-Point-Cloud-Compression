@@ -75,7 +75,7 @@ class Encoder:
         sampled_batch = self.sample(batch)
 
         # Compression
-        compressed_data = self.compress(sampled_batch)
+        compressed_data = self.compress_batch(sampled_batch)
 
         # Serialization
         serialized_data = self.serialize_data(compressed_data)
@@ -107,7 +107,7 @@ class Encoder:
 
         return sampled_batch
 
-    def compress(self, sampled_batch):
+    def compress_batch(self, sampled_batch):
         """
         Mock compression function. Currently, just returns the input.
         """
@@ -116,9 +116,14 @@ class Encoder:
         data["segment_duration"] = self.segment_duration
         data["frame_rate"] = self.target_fps
         for i in range(3):
-            data[i] = sampled_batch
+            data[i] = self.compress(sampled_batch)
 
         return data  # Replace with actual compression logic
+
+
+    def compress(self, data):
+        return data
+        
 
     def serialize_data(self, data):
         """

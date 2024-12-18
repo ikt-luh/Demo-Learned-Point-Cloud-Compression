@@ -5,6 +5,7 @@ import time
 import zmq
 import pickle
 import threading
+from collections import deque
 from datetime import datetime
 from server import HTTPServerHandler
 from mpd_manager import MPDManager
@@ -28,11 +29,11 @@ class StreamingServer:
 
         self.port = port
         self.segment_duration = segment_duration
-        self.segment_buffer = [] 
+        self.segment_buffer = deque()
         self.buffer_lock = threading.Lock()
         self.io_lock = threading.Lock()
         
-        self.cleanup_queue = []
+        self.cleanup_queue = deque()
 
     def start_http_server(self):
         """
@@ -56,27 +57,27 @@ class StreamingServer:
 
             with self.buffer_lock:
                 self.segment_buffer.append(data)
+            time.sleep(self.segment_duration/2)
 
 
     def process_segments(self):
         """
         Process buffered data at fixed time intervals (segment_duration).
         """
-        # Startup buffer filling
-        while len(self.segment_buffer) < 1:
-            time.sleep(0.1)
-
         while True:
             timestamp = datetime.now().timestamp()
             current_segment = math.floor(timestamp/self.segment_duration)
 
             # Process and flush the current segment
-            with self.buffer_lock:
-                if len(self.segment_buffer) > 0:
-                    data = self.segment_buffer.pop(0)
-                else:
-                    print("Empty buffer, waiting for data", flush=True)
-            threading.Thread(target=self.handle_data, args=(data, current_segment)).start()
+            if len(self.segment_buffer) > 0:
+                with self.buffer_lock:
+                    data = self.segment_buffer.popleft()
+            else:
+                time.sleep(0.2)
+                continue
+
+            #threading.Thread(target=self.handle_data, args=(data, current_segment)).start()
+            self.handle_data(data, current_segment)
             self.cleanup_queue.append(current_segment)
 
             sleep_time = max(0, self.segment_duration - (datetime.now().timestamp() - timestamp))
@@ -87,7 +88,7 @@ class StreamingServer:
         num_reps = 3 # TODO
         while True:
             if len(self.cleanup_queue) > 10:
-                old_segment_number = self.cleanup_queue.pop(0)
+                old_segment_number = self.cleanup_queue.popleft()
                 for key in range(num_reps):
                     segment_folder = os.path.join(self.output_directory, f"ID{key}")
                     segment_path = os.path.join(segment_folder, f"segment-{old_segment_number:015d}.bin")
@@ -105,7 +106,7 @@ class StreamingServer:
         """
         _ = data.pop("timestamp", None)
         _ = data.pop("segment_duration", None)
-        _ = data.pop("frame_ratee", None)
+        _ = data.pop("frame_rate", None)
 
         segment_number = math.floor((timestamp) / self.segment_duration)
 
@@ -116,10 +117,10 @@ class StreamingServer:
             os.makedirs(segment_folder, exist_ok=True)
 
             # Write the segment to disk
-            with self.io_lock:
-                with open(tmp_segment_path, "wb") as f:
-                    pickle.dump(item, f)
-                os.rename(tmp_segment_path, segment_path)
+            with open(tmp_segment_path, "wb") as f:
+                pickle.dump(item, f)
+            os.rename(tmp_segment_path, segment_path)
+            print("Wrote to {}".format(segment_path), flush=True)
 
             bandwidth = os.path.getsize(segment_path) * 8
 
