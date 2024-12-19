@@ -233,7 +233,7 @@ class CompressionPipeline:
         # bin_dir = os.path.join(base_directory, f"tmp_{thread_id}_{timestamp}_points_bin.ply")
 
         tmp_dir = os.path.join(base_directory, f"tmp_{timestamp}_points_enc.ply")
-        bin_dir = os.path.join(base_directory, f"tmp_{timestamp}_points_bin.ply")
+        bin_dir = os.path.join(base_directory, f"tmp_{timestamp}_points_enc.bin")
 
         point_bitstreams = []
         for y_point in y_points:
