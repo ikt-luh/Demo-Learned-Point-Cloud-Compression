@@ -196,8 +196,25 @@ class DecompressionPipeline:
     def hyper_synthesis_step(self, z_hats):
         """ Step 4: Hyper Synthesis """
         t0 = time.time()
-
         z_hat = utils.batch_sparse_tensors(z_hats, tensor_stride=32)
+
+        """
+        # Transfer z_hat to CPU
+        z_hat_cpu = ME.SparseTensor(
+            coordinates=z_hat.C,
+            features=z_hat.F,
+            device=torch.device("cpu"),
+            tensor_stride=32
+        )
+        self.decompression_model.entropy_model.h_s.to('cpu')
+        gaussian_params = self.decompression_model.entropy_model.h_s(z_hat_cpu)
+        gaussian_params = ME.SparseTensor(
+            coordinates=gaussian_params.C,
+            features=gaussian_params.F,
+            device=self.device,
+            tensor_stride=8
+        )
+        """
 
         gaussian_params = self.decompression_model.entropy_model.h_s(z_hat)
 
@@ -251,10 +268,10 @@ class DecompressionPipeline:
     def hyper_synthesis(self, y_hat, ks):
         """ Step 6: Hyper Synthesis """
         t0 = time.time()
-        # Dummy implementation
+
         reconstructed_pointcloud = self.decompression_model.g_s(y_hat, k=ks)
+
         t1 = time.time()
-        print(reconstructed_pointcloud.C.shape)
         return reconstructed_pointcloud, t1 - t0
 
     def pack_batches(self, pointcloud, num_frames=3):

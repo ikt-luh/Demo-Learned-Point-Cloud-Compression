@@ -44,6 +44,5 @@ class Decoder:
     
 
 if __name__ == "__main__":
-    print("TESTING")
     decoder = Decoder()
     decoder.run()
