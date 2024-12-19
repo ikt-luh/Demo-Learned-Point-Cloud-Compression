@@ -23,6 +23,7 @@ services:
     container_name: encoder
     volumes:
       - ../dependencies/unified-compression/:/app/unified/
+      - ../shared/:/app/shared/
     runtime: nvidia
     environment:
       - NVIDIA_VISIBLE_DEVICES=all

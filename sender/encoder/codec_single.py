@@ -4,10 +4,9 @@ import time
 import torch
 import numpy as np
 import MinkowskiEngine as ME
-import threading
 from bitstream import BitStream
 
-import utils
+import shared.utils as utils
 from unified.model import model
 
 class CompressionPipeline:

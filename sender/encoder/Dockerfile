@@ -34,6 +34,7 @@ RUN git clone https://github.com/MPEGGroup/mpeg-pcc-tmc13.git && \
 
 # Copy application code
 COPY . /app
+
 WORKDIR /app
 ENV PYTHONPATH=/app
 

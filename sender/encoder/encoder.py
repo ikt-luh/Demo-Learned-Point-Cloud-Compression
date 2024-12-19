@@ -120,7 +120,7 @@ class Encoder:
         compressed_data = self.codec.compress(sampled_batch)
 
         # TODO: Hanlde uncompressed input and multiple qualities
-        data[0] = compressed_data
+        data[str(0)] = compressed_data
 
         return data  # Replace with actual compression logic
 
