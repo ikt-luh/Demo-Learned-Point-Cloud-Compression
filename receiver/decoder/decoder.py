@@ -1,3 +1,4 @@
+import os
 import random
 import time
 import yaml
@@ -9,6 +10,10 @@ import numpy as np
 import torch
 
 from codec_single import DecompressionPipeline
+
+os.environ["CUBLAS_WORKSPACE_CONFIG"]=":4096:8"
+torch.manual_seed(0)
+torch.use_deterministic_algorithms(True)
 
 class Decoder:
     def __init__(self, max_queue_size=60, target_fps=3, gop_size=3, segment_duration=2.0):

@@ -172,6 +172,7 @@ class DecompressionPipeline:
             tensor_stride=8,
             device=self.device
         )
+        print(latent_coordinates.C.shape)
         latent_coordinates = self.decompression_model.g_s.down_conv(latent_coordinates)
         latent_coordinates = self.decompression_model.g_s.down_conv(latent_coordinates)
 
