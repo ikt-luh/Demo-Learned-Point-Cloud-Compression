@@ -182,3 +182,34 @@ def gpcc_encode(points, tmp_dir, bin_dir):
     os.remove(bin_dir)
 
     return data
+
+
+def gpcc_decode(data, tmp_dir, bin_dir):
+    # TODO: Make thread save (File writing operations)
+
+    # Encode with G-PCC
+    with open(bin_dir, "wb") as binary:
+        binary.write(data)
+
+    subp=subprocess.Popen(gpcc_directory + 
+                                ' --mode=1'+ 
+                                ' --compressedStreamPath='+bin_dir+ 
+                                ' --reconstructedDataPath='+tmp_dir+
+                                ' --outputBinaryPly=0',
+                                shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    # Read stdout and stderr
+    stdout, stderr = subp.communicate()
+    # Print the outputs
+    if subp.returncode != 0:
+        print("Error occurred:")
+        print(stderr.decode())
+        c=subp.stdout.readline()
+    
+    # Load ply
+    pcd = o3d.io.read_point_cloud(tmp_dir)
+    points = torch.tensor(np.asarray(pcd.points))
+
+    # Clean up
+    os.remove(tmp_dir)
+    os.remove(bin_dir)
+    return points
