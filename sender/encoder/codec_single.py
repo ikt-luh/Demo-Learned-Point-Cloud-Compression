@@ -252,7 +252,7 @@ class CompressionPipeline:
         [ num_frames (32) | q_g (32) | q_g (32) | [frame1] ... frame[N] ]
 
         Frame:  [ Header (128 bits) | Content (whatever) ]
-            Header: [y_shape (32) | len_points (32) | len_y (32) | len_z (32) | k1,k2,k3 (96)] 
+            Header: [y_shape (32) | z_shape (32) | len_points (32) | len_y (32) | len_z (32) | k1,k2,k3 (96)] 
             Content: [ points | z_string | y_string ] 
         """
         t0 = time.time()
@@ -273,6 +273,7 @@ class CompressionPipeline:
 
             # Header
             stream.write(y_shape, np.int32)
+            stream.write(z_shape, np.int32)
             stream.write(len(points), np.int32)
             stream.write(len(y_string[0]), np.int32)
             stream.write(len(z_string[0]), np.int32)
