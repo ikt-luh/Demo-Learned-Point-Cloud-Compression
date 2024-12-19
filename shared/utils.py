@@ -48,7 +48,6 @@ def batch_sparse_tensors(list_of_sparse_tensors, tensor_stride=8):
     for i, tensor in enumerate(list_of_sparse_tensors):
         batch_indices = torch.full((tensor.C.shape[0], 1), fill_value=i, dtype=tensor.dtype, device=tensor.device)
         coordinates.append(torch.cat([batch_indices, tensor.C], dim=1))
-        print(coordinates[i].shape)
         features.append(tensor.F)
 
     sparse_tensor = ME.SparseTensor(

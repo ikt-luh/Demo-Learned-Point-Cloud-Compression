@@ -144,8 +144,7 @@ class StreamingClient:
         for frame in data:
             points = frame["points"] + 100
             colors = 255 * frame["colors"]
-            timestamp = frame["timestamp"]
-            print("COLORS: {}".format(np.max(colors)))
+            #timestamp = frame["timestamp"]
 
             # Pack to bytes
             points_bytes = np.array(points, dtype=np.float32).tobytes()

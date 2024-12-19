@@ -8,6 +8,9 @@ from bitstream import BitStream
 
 import shared.utils as utils
 from unified.model import model
+
+torch.set_grad_enabled(False)
+
 class DecompressionPipeline:
     def __init__(self):
         # Define GPU device
@@ -254,10 +257,35 @@ class DecompressionPipeline:
         print(reconstructed_pointcloud.C.shape)
         return reconstructed_pointcloud, t1 - t0
 
-    def pack_batches(self, reconstructed_pointcloud):
+    def pack_batches(self, pointcloud, num_frames=3):
         """ Step 7: Postprocessing and packing. """
         t0 = time.time()
-        # Dummy implementation
-        final_data = None
+
+        # Extract coordinates and features from the SparseTensor
+        points = pointcloud.C.cpu().numpy()  # Convert to NumPy on CPU
+        colors = pointcloud.F.cpu().numpy()  # Convert to NumPy on CPU
+
+        # Initialize the batch list
+        batch = []
+
+        for i in range(num_frames):
+            # Extract batch-specific points and colors
+            batch_indices = points[:, 0] == i  # Match batch index
+            item_points = points[batch_indices][:, 1:]  # Exclude batch index
+            item_colors = colors[batch_indices][:, 1:]  # Exclude dummy ones column
+
+            # Handle NaN values in colors
+            item_colors = np.nan_to_num(item_colors, nan=0.0)  # Replace NaNs with 0
+
+            # Scale colors to [0, 255] and convert to int8
+            item_colors = np.clip(item_colors * 255.0, 0, 255) / 255
+
+            # Create a data dictionary for this batch
+            data = {
+                "points": item_points,  # Shape: (N, D)
+                "colors": item_colors,  # Shape: (N, C), scaled to int8
+            }
+            batch.append(data)
+
         t1 = time.time()
-        return final_data, t1 - t0
+        return batch, t1 - t0
