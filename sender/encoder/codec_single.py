@@ -85,6 +85,7 @@ class CompressionPipeline:
         print("Encoding Total: \t\t\t {:.3f} seconds".format(t_sum), flush=True)
         print("Bitstream length: \t\t {} bits".format(len(byte_array * 8)), flush=True)
         print("BPP: \t\t\t\t {:.3f}".format(len(byte_array * 8) / num_points), flush=True)
+        print("Num Points - (Total): {} Per Frame {:.3f}".format(num_points, num_points/3), flush=True)
         print("-----------------------------------------------", flush=True)
 
         t_end = time.time()
@@ -273,10 +274,11 @@ class CompressionPipeline:
             # Header
             stream.write(y_shape, np.int32)
             stream.write(len(points), np.int32)
-            stream.write(len(y_string), np.int32)
-            stream.write(len(z_string), np.int32)
+            stream.write(len(y_string[0]), np.int32)
+            stream.write(len(z_string[0]), np.int32)
+            print(len(points), len(y_string[0]), len(z_string[0]))
             for k_level in k:
-                stream.write(k, np.int32)
+                stream.write(k_level, np.int32)
 
             # Content
             stream.write(points)
@@ -284,7 +286,8 @@ class CompressionPipeline:
             stream.write(y_string[0])
 
         bit_string = stream.__str__()
-        byte_array = bytes(int(bit_string[i:i+8], 2) for i in range(0, len(bit_string), 8))
+        #byte_array = bytes(int(bit_string[i:i+8], 2) for i in range(0, len(bit_string), 8))
+        byte_array = int(bit_string, 2).to_bytes(len(bit_string) // 8, byteorder='big')
 
         t1 = time.time()
         t_step = t1 - t0
