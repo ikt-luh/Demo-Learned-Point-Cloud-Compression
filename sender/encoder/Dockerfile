@@ -42,5 +42,5 @@ ENV NVIDIA_VISIBLE_DEVICES all
 ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
 
 # Entry point for the encoder
-CMD ["python3", "encoder_mock.py"]
+CMD ["python3", "encoder.py"]
 

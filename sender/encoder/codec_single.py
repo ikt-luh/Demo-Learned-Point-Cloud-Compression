@@ -43,6 +43,7 @@ class CompressionPipeline:
         Runs all steps from analysis to bitstream writing.
         Supports multiple calls without conflict.
         """
+        t_start = time.time()
         pointclouds, sideinfo = self.unpack_batch(data)
 
         # Step 1 (Analysis)
@@ -68,6 +69,10 @@ class CompressionPipeline:
         t_7 = 0.0
         byte_array, t_7 = self.make_bitstream(y_strings, z_strings, y_shapes, z_shapes, points_streams, k, q)
 
+        compressed_data = byte_array # TODO: Add more qualities
+
+
+        # Logging
         num_points = pointclouds.C.shape[0]
         t_sum = t_1 + t_2 + t_3 + t_4 + t_5 + t_6 + t_7
         print("Step 1 (Analysis): \t\t {:.3f} seconds".format(t_1), flush=True)
@@ -83,7 +88,9 @@ class CompressionPipeline:
         print("BPP: \t\t\t\t {:.3f}".format(len(byte_array * 8) / num_points), flush=True)
         print("-----------------------------------------------", flush=True)
 
-        return data # TODO: Mock for now 
+        t_end = time.time()
+        print("Compression time: {:.3f} sec".format(t_end - t_start))
+        return compressed_data, sideinfo 
 
 
     def unpack_batch(self, batch):
