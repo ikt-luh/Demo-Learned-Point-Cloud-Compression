@@ -114,6 +114,14 @@ class DecompressionPipeline:
             points = stream.read(int(point_stream_length) * 8)
             y_stream = stream.read(int(y_stream_length) * 8) # TODO: Check if we need to parse back to bytestring
             z_stream = stream.read(int(z_stream_length) * 8)
+            
+            # Parse Content to bytes
+            points_bits = points.__str__()
+            points = int(points_bits, 2).to_bytes(len(points_bits) // 8, byteorder='big')
+            y_bits = y_stream.__str__()
+            y_stream = int(y_bits, 2).to_bytes(len(y_bits) // 8, byteorder='big')
+            z_bits = z_stream.__str__()
+            z_stream = int(z_bits, 2).to_bytes(len(z_bits) // 8, byteorder='big')
 
             # Sort into datastructures
             ks.append(k)
@@ -123,16 +131,30 @@ class DecompressionPipeline:
             points_streams.append(points)
 
         t1 = time.time()
-        print(ks)
-        print(q)
-        print(y_shapes)
         return y_strings, z_strings, y_shapes, z_shapes, points_streams, ks, q, t1 - t0
 
     def geometry_decompression_step(self, points_streams):
         """ Step 2: Geometry Decompression """
         t0 = time.time()
-        # Dummy implementation
+        
+        base_directory = "/tmp/"
+        os.makedirs(base_directory, exist_ok=True)
+
+        timestamp = int(time.time() * 1e6)
+        # TODO: Create unique subdirectory names for threads
+        # thread_id = threading.get_ident()
+        # tmp_dir = os.path.join(base_directory, f"tmp_{thread_id}_{timestamp}_points_enc.ply")
+        # bin_dir = os.path.join(base_directory, f"tmp_{thread_id}_{timestamp}_points_bin.ply")
+
+        tmp_dir = os.path.join(base_directory, f"tmp_{timestamp}_points_enc.ply")
+        bin_dir = os.path.join(base_directory, f"tmp_{timestamp}_points_enc.bin")
+
         y_points = []
+        for points_stream in points_streams:
+            y_point = utils.gpcc_decode(points_stream, tmp_dir, bin_dir)
+            y_points.append(y_point)
+            print(y_point.shape, flush=True)
+
         t1 = time.time()
         return y_points, t1 - t0
 
