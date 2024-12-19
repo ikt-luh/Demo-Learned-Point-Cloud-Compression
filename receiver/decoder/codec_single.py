@@ -69,7 +69,6 @@ class DecompressionPipeline:
         print("Step 3 (Factorized Model): \t {:.3f} seconds".format(t_3), flush=True)
         print("Step 4 (Hyper Synthesis): \t {:.3f} seconds".format(t_4), flush=True)
         print("Step 5 (Gaussian Model): \t\t {:.3f} seconds".format(t_5), flush=True)
-
         print("Step 6 (Hyper Synthesis): \t {:.3f} seconds".format(t_6), flush=True)
         print("Step 7 (Postprocessing): \t\t {:.3f} seconds".format(t_7), flush=True)
         print("-------------------------------------------------", flush=True)
@@ -206,8 +205,43 @@ class DecompressionPipeline:
     def gaussian_model_step(self, y_strings, y_shapes, y_points, q, gaussian_params):
         """ Step 5: Gaussian Entropy Model """
         t0 = time.time()
-        # Dummy implementation
-        y_hat = None
+
+        y_points = utils.sort_points(y_points.to(self.device))
+        gaussian_params_feats = gaussian_params.features_at_coordinates(y_points.float())
+        gaussian_params = utils.get_features_per_batch(gaussian_params_feats, y_points)
+
+        y_hat_feats = []
+        for y_string, y_shape, gaussian_param in zip(y_strings, y_shapes, gaussian_params):
+            scales_hat, means_hat = gaussian_param.chunk(2, dim=1)
+            scales_hat = scales_hat.t().unsqueeze(0)
+            means_hat = means_hat.t().unsqueeze(0)
+
+            # Scale NN
+            scale = self.decompression_model.entropy_model.scale_nn(q) + self.decompression_model.entropy_model.eps
+            scale = scale.repeat(means_hat.shape[-1], 1).t().unsqueeze(0)
+            rescale = torch.tensor(1.0) / scale
+
+            indexes = self.decompression_model.entropy_model.gaussian_conditional.build_indexes(scales_hat * scale)
+
+            q_val = self.decompression_model.entropy_model.gaussian_conditional.decompress([y_string], indexes)
+            q_abs, signs = q_val.abs(), torch.sign(q_val)
+
+            y_q_stdev = self.decompression_model.entropy_model.gaussian_conditional.lower_bound_scale(scales_hat * scale)
+
+            q_offsets = (-1) * self.decompression_model.entropy_model.get_offsets(y_q_stdev, scale)
+            q_offsets[q_abs < 0.0001] = (0)
+
+            y_hat_feat = signs * (q_abs + q_offsets)
+            y_hat_feat = y_hat_feat * rescale + means_hat
+            y_hat_feats.append(y_hat_feat[0].t())
+
+        y_hat = ME.SparseTensor(
+            coordinates=y_points,
+            features=torch.cat(y_hat_feats, dim=0),
+            tensor_stride=8,
+            device=self.device
+        )
+
         t1 = time.time()
         return y_hat, t1 - t0
 
@@ -215,8 +249,9 @@ class DecompressionPipeline:
         """ Step 6: Hyper Synthesis """
         t0 = time.time()
         # Dummy implementation
-        reconstructed_pointcloud = None
+        reconstructed_pointcloud = self.decompression_model.g_s(y_hat, k=ks)
         t1 = time.time()
+        print(reconstructed_pointcloud.C.shape)
         return reconstructed_pointcloud, t1 - t0
 
     def pack_batches(self, reconstructed_pointcloud):
