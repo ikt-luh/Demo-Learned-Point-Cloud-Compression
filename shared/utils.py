@@ -5,9 +5,9 @@ import numpy as np
 import open3d as o3d
 import MinkowskiEngine as ME
 
-gpcc_directory = "/app/dependencies/mpeg-pcc-tmc13/build/tmc3/tmc3"
+GPCC_DIRECTORY = "/app/dependencies/mpeg-pcc-tmc13/build/tmc3/tmc3"
 
-def stack_tensors(points, colors):
+def stack_tensors(points, colors=None):
     """
     Stacks points and colors into PyTorch tensors.
 
@@ -23,8 +23,10 @@ def stack_tensors(points, colors):
         stacked_colors (torch.Tensor): Tensor of shape (sum(N_i), 3) without a batch/index column.
     """
     # Convert points and colors to PyTorch tensors
-    points = [torch.from_numpy(p) for p in points]
-    colors = [torch.from_numpy(c) for c in colors]
+    points = [torch.from_numpy(p) if isinstance(p, np.ndarray) else p for p in points]
+
+    if colors is not None:
+            colors = [torch.from_numpy(c) if isinstance(c, np.ndarray) else c for c in colors]
 
     # Stack points with an additional batch/index column
     stacked_points = torch.cat([
@@ -33,10 +35,28 @@ def stack_tensors(points, colors):
     ], dim=0)
 
     # Stack colors without additional columns
-    stacked_colors = torch.cat(colors, dim=0)
+    if colors is not None:
+        stacked_colors = torch.cat(colors, dim=0)
+        return stacked_points, stacked_colors
+    else:
+        return stacked_points
 
-    return stacked_points, stacked_colors
 
+def batch_sparse_tensors(list_of_sparse_tensors, tensor_stride=8):
+    coordinates = []
+    features = []
+    for i, tensor in enumerate(list_of_sparse_tensors):
+        batch_indices = torch.full((tensor.C.shape[0], 1), fill_value=i, dtype=tensor.dtype, device=tensor.device)
+        coordinates.append(torch.cat([batch_indices, tensor.C], dim=1))
+        print(coordinates[i].shape)
+        features.append(tensor.F)
+
+    sparse_tensor = ME.SparseTensor(
+        coordinates=torch.cat(coordinates, dim=0),
+        features=torch.cat(features, dim=0),
+        tensor_stride=tensor_stride,
+    )
+    return sparse_tensor
 
 def get_points_per_batch(sparse_tensor, batch_dim=True):
     """
@@ -48,7 +68,11 @@ def get_points_per_batch(sparse_tensor, batch_dim=True):
     Returns:
         points: A list of the points per batch.
     """
-    coordinates = sparse_tensor.C  # Shape: (num_points, ndim)
+    if isinstance(sparse_tensor, ME.SparseTensor):
+        coordinates = sparse_tensor.C  # Shape: (num_points, ndim)
+    else:
+        coordinates = sparse_tensor
+
     batch_indices = coordinates[:, 0]
 
     points_per_batch = []
@@ -152,7 +176,7 @@ def gpcc_encode(points, tmp_dir, bin_dir):
     o3d.t.io.write_point_cloud(tmp_dir, pc, write_ascii=True)
 
     # Encode with G-PCC
-    subp=subprocess.Popen(gpcc_directory + 
+    subp=subprocess.Popen(GPCC_DIRECTORY + 
                     ' --mode=0' + 
                     ' --positionQuantizationScale=1' + 
                     ' --trisoupNodeSizeLog2=0' + 
@@ -191,7 +215,7 @@ def gpcc_decode(data, tmp_dir, bin_dir):
     with open(bin_dir, "wb") as binary:
         binary.write(data)
 
-    subp=subprocess.Popen(gpcc_directory + 
+    subp=subprocess.Popen(GPCC_DIRECTORY + 
                                 ' --mode=1'+ 
                                 ' --compressedStreamPath='+bin_dir+ 
                                 ' --reconstructedDataPath='+tmp_dir+
@@ -207,7 +231,7 @@ def gpcc_decode(data, tmp_dir, bin_dir):
     
     # Load ply
     pcd = o3d.io.read_point_cloud(tmp_dir)
-    points = torch.tensor(np.asarray(pcd.points))
+    points = np.asarray(pcd.points)
 
     # Clean up
     os.remove(tmp_dir)

@@ -48,10 +48,10 @@ class DecompressionPipeline:
         y_points, t_2 = self.geometry_decompression_step(points_streams)
 
         # Step 3 (Factorized Entropy Model)
-        z_hat, t_3 = self.factorized_model_step(z_strings, z_shapes)
+        z_hats, t_3 = self.factorized_model_step(z_strings, z_shapes, y_points)
 
         # Step 4 (Hyper Synthesis)
-        gaussian_params, t_4 = self.hyper_synthesis_step(z_hat)
+        gaussian_params, t_4 = self.hyper_synthesis_step(z_hats)
 
         # Step 5 (Gaussian Entropy Model)
         y_hat, t_5 = self.gaussian_model_step(y_strings, y_shapes, y_points, q, gaussian_params)
@@ -98,9 +98,9 @@ class DecompressionPipeline:
 
         # Frames
         for i in range(num_frames):
-            print(i)
             # Frame Header
-            y_shape = [stream.read(np.int32)]
+            y_shape = stream.read(np.int32)
+            z_shape = stream.read(np.int32)
             point_stream_length = stream.read(np.int32)
             y_stream_length = stream.read(np.int32)
             z_stream_length = stream.read(np.int32)
@@ -126,6 +126,7 @@ class DecompressionPipeline:
             # Sort into datastructures
             ks.append(k)
             y_shapes.append(y_shape)
+            z_shapes.append(z_shape)
             y_strings.append(y_stream)
             z_strings.append(z_stream)
             points_streams.append(points)
@@ -153,25 +154,53 @@ class DecompressionPipeline:
         for points_stream in points_streams:
             y_point = utils.gpcc_decode(points_stream, tmp_dir, bin_dir)
             y_points.append(y_point)
-            print(y_point.shape, flush=True)
 
+        y_points = utils.stack_tensors(y_points)
         t1 = time.time()
         return y_points, t1 - t0
 
-    def factorized_model_step(self, z_strings, z_shapes):
+    def factorized_model_step(self, z_strings, z_shapes, y_points):
         """ Step 3: Factorized Entropy Model """
         t0 = time.time()
-        # Dummy implementation
-        z_hat = None
-        t1 = time.time()
-        return z_hat, t1 - t0
 
-    def hyper_synthesis_step(self, z_hat):
+        # Get latent coordinates
+        latent_coordinates = ME.SparseTensor(
+            coordinates=y_points.clone(), 
+            features=torch.ones((y_points.shape[0], 1)), 
+            tensor_stride=8,
+            device=self.device
+        )
+        latent_coordinates = self.decompression_model.g_s.down_conv(latent_coordinates)
+        latent_coordinates = self.decompression_model.g_s.down_conv(latent_coordinates)
+
+        z_points = utils.sort_points(latent_coordinates.C)
+        z_points = utils.get_points_per_batch(z_points)
+
+        z_hats = []
+        for z_point, z_string, z_shape in zip(z_points, z_strings, z_shapes):
+            z_hat_feat = self.decompression_model.entropy_model.entropy_bottleneck.decompress([z_string], [z_shape])
+            z_hat = ME.SparseTensor(
+                coordinates=z_point,
+                features=z_hat_feat[0].t(),
+                tensor_stride=32,
+                device=self.device
+            )
+            z_hats.append(z_hat)
+
+        t1 = time.time()
+        t_step = t1 - t0
+        return z_hats, t_step
+
+    def hyper_synthesis_step(self, z_hats):
         """ Step 4: Hyper Synthesis """
         t0 = time.time()
-        # Dummy implementation
-        gaussian_params = None
+
+        z_hat = utils.batch_sparse_tensors(z_hats, tensor_stride=32)
+
+        gaussian_params = self.decompression_model.entropy_model.h_s(z_hat)
+
         t1 = time.time()
+        t_step = t1 - t0
         return gaussian_params, t1 - t0
 
     def gaussian_model_step(self, y_strings, y_shapes, y_points, q, gaussian_params):
