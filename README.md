@@ -146,3 +146,14 @@ For maximum performance, we want both jetson's to run in Power Mode 0 (MAXN)
 ```
 sudo /usr/sbin/nvpmodel -m 0
 ```
+
+### Monitoring ressource utilization
+[jetson_stats](https://github.com/rbonghi/jetson_stats) can be used to monitor ressource utilization on Jetson Devices.
+Install via:
+```
+sudo pip3 install -U jetson-stats
+```
+and run with
+```
+jtop
+```

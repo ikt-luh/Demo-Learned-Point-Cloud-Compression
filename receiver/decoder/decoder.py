@@ -8,6 +8,8 @@ import pickle
 import numpy as np
 import torch
 
+from codec_single import DecompressionPipeline
+
 class Decoder:
     def __init__(self, max_queue_size=60, target_fps=3, gop_size=3, segment_duration=2.0):
         context = zmq.Context()
@@ -22,6 +24,8 @@ class Decoder:
         # Bounded queue for frame buffering
         self.queue = queue.Queue(maxsize=max_queue_size)
 
+        self.codec = DecompressionPipeline()
+
 
     def run(self):
         """
@@ -29,9 +33,14 @@ class Decoder:
         """
         while True:
             data = self.pull_socket.recv()
+            data = pickle.loads(data)
             print("Received data", flush=True)
-            time.sleep(random.uniform(0.5, 0.8))
-            self.push_socket.send(data)
+
+            data_bitstream = data[0]
+            decompressed_batch = self.codec.decompress(data_bitstream)
+
+            decompressed_batch = pickle.dumps(decompressed_batch)
+            self.push_socket.send(decompressed_batch)
     
 
 if __name__ == "__main__":
