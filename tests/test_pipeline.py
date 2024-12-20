@@ -21,8 +21,8 @@ def load_point_cloud(file_path):
 
     # Create a dictionary to simulate a batch item
     batch_item = {
-        "points": torch.tensor(points, dtype=torch.float32),
-        "colors": torch.tensor(colors, dtype=torch.float32)
+        "points": torch.tensor(points[:100], dtype=torch.float32),
+        "colors": torch.tensor(colors[:100], dtype=torch.float32)
     }
 
     # Return as a list to simulate a batch (one item batch)
@@ -54,6 +54,7 @@ def main():
 
     # Now decode the compressed data
     print("Decoding compressed data...")
+    print(len(compressed_data))
     final_data = decoder.decompress(compressed_data)
     print("Decoding completed.")
 

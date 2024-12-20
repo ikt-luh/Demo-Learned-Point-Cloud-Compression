@@ -170,7 +170,7 @@ def gpcc_encode(points, tmp_dir, bin_dir):
     # TODO: Make thread save (File writing operations)
     # Save as ply
     dtype = o3d.core.float32
-    p_tensor = o3d.core.Tensor(points.detach().cpu().numpy()[:, 1:], dtype=dtype)
+    p_tensor = o3d.core.Tensor(points.detach().cpu().numpy()[:, 1:] / 8, dtype=dtype)
     pc = o3d.t.geometry.PointCloud(p_tensor)
     o3d.t.io.write_point_cloud(tmp_dir, pc, write_ascii=True)
 
@@ -213,6 +213,8 @@ def gpcc_decode(data, tmp_dir, bin_dir):
     # Encode with G-PCC
     with open(bin_dir, "wb") as binary:
         binary.write(data)
+        binary.flush()  # Ensure data is written to disk immediately
+        os.fsync(binary.fileno())  # Ensure
 
     subp=subprocess.Popen(GPCC_DIRECTORY + 
                                 ' --mode=1'+ 
@@ -230,7 +232,7 @@ def gpcc_decode(data, tmp_dir, bin_dir):
     
     # Load ply
     pcd = o3d.io.read_point_cloud(tmp_dir)
-    points = np.asarray(pcd.points)
+    points = np.asarray(pcd.points * 8)
 
     # Clean up
     os.remove(tmp_dir)

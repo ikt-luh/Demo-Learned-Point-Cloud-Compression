@@ -32,15 +32,17 @@ RUN git clone https://github.com/MPEGGroup/mpeg-pcc-tmc13.git && \
     cmake /app/dependencies/mpeg-pcc-tmc13 && \
     make
 
+
+COPY tests/test_pipeline.py /app/test_pipeline.py
+COPY tests/test.ply /app/test.ply
+COPY dependencies/unified-compression /app/unified
+
 # Copy application code for encoder and decoder
 COPY sender/encoder /app/encoder
 COPY receiver/decoder /app/decoder
 
 # Copy shared utils and test files
 COPY shared/utils.py /app/shared/utils.py
-COPY tests/test_pipeline.py /app/test_pipeline.py
-COPY tests/test.ply /app/test.ply
-COPY dependencies/unified-compression /app/unified
 
 # Set working directory
 WORKDIR /app

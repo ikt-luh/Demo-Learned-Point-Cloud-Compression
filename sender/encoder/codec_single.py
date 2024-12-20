@@ -214,6 +214,7 @@ class CompressionPipeline:
         t0 = time.time()
         
         gaussian_params_feats = gaussian_params.features_at_coordinates(y.C.float())
+        print(gaussian_params_feats[0])
 
         gaussian_params = utils.get_features_per_batch(gaussian_params_feats, y.C)
         y_feats = utils.get_features_per_batch(y)
@@ -286,7 +287,12 @@ class CompressionPipeline:
         stream.write(num_frames, np.int32)
         stream.write(q[0, 0].cpu(), np.int32)
         stream.write(q[0, 1].cpu(), np.int32)
-        print("NUM FRAMES: {}".format(num_frames), flush=True)
+
+        print("-------------")
+        print("Header:")
+        print("Num Frames: {}".format(num_frames))
+        print("Q: {} {}".format(q[0,0], q[0,1]))
+        print("-------------")
 
         for i in range(num_frames):
             points = points_streams[i]
@@ -301,20 +307,25 @@ class CompressionPipeline:
             stream.write(len(points), np.int32)
             stream.write(len(y_string[0]), np.int32)
             stream.write(len(z_string[0]), np.int32)
-            print(len(points))
-            print(len(y_string[0]))
-            print(len(z_string[0]))
+
             for k_level in k:
                 stream.write(k_level, np.int32)
 
             # Content
-            stream.write(points)
-            stream.write(y_string[0])
-            stream.write(z_string[0])
+            stream.write(points, bytes)
+            stream.write(y_string[0], bytes)
+            stream.write(z_string[0], bytes)
+            print("Frame {}:".format(i))
+            print("y_shape: \t{}".format(y_shape))
+            print("z_shape: \t{}".format(z_shape))
+            print("points_len: \t{}".format(len(points)))
+            print("y_len: \t\t{}".format(len(y_string[0])))
+            print("z_len: \t\t{}".format(len(z_string[0])))
+            print("k's: \t{}".format(k))
+            print("-----------")
 
         bit_string = stream.__str__()
-        #byte_array = bytes(int(bit_string[i:i+8], 2) for i in range(0, len(bit_string), 8))
-        byte_array = int(bit_string, 2).to_bytes(len(bit_string) // 8, byteorder='big')
+        byte_array = bytes(int(bit_string[i:i+8], 2) for i in range(0, len(bit_string), 8))
 
         t1 = time.time()
         t_step = t1 - t0

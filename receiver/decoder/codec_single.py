@@ -87,6 +87,7 @@ class DecompressionPipeline:
         
         stream = BitStream()
         stream.write(compressed_data, bytes)
+        print(len(stream))
 
         y_strings, z_strings = [], []
         y_shapes, z_shapes = [], []
@@ -106,6 +107,7 @@ class DecompressionPipeline:
             point_stream_length = stream.read(np.int32)
             y_stream_length = stream.read(np.int32)
             z_stream_length = stream.read(np.int32)
+
             print(point_stream_length)
             print(y_stream_length)
             print(z_stream_length)
@@ -114,20 +116,25 @@ class DecompressionPipeline:
             for i in range(3):
                 k_level = stream.read(np.int32)
                 k.append(k_level)
+            print(k)
             
-            # Content
-            points = stream.read(int(point_stream_length) * 8)
-            y_stream = stream.read(int(y_stream_length) * 8) 
-            z_stream = stream.read(int(z_stream_length) * 8)
-            
-            # Parse Content to bytes
-            points_bits = points.__str__()
-            points = int(points_bits, 2).to_bytes(len(points_bits) // 8, byteorder='big')
-            y_bits = y_stream.__str__()
-            y_stream = int(y_bits, 2).to_bytes(len(y_bits) // 8, byteorder='big')
-            z_bits = z_stream.__str__()
-            z_stream = int(z_bits, 2).to_bytes(len(z_bits) // 8, byteorder='big')
 
+            # Content
+            print("Data")
+            print(len(stream))
+            points = stream.read(bytes, int(point_stream_length))
+            #points = int(points, 2).to_bytes(len(points) // 8, byteorder='big')
+            print(len(points))
+
+            y_stream = stream.read(bytes, int(y_stream_length))
+            #y_stream = int(y_stream, 2).to_bytes(len(y_stream) // 8, byteorder='big')
+            print(len(y_stream))
+
+            z_stream = stream.read(bytes, int(z_stream_length))
+            #z_stream = int(z_stream, 2).to_bytes(len(z_stream) // 8, byteorder='big')
+            print(len(z_stream))
+            print(len(stream))
+            
             # Sort into datastructures
             ks.append(k)
             y_shapes.append(y_shape)
