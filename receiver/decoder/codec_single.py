@@ -106,6 +106,9 @@ class DecompressionPipeline:
             point_stream_length = stream.read(np.int32)
             y_stream_length = stream.read(np.int32)
             z_stream_length = stream.read(np.int32)
+            print(point_stream_length)
+            print(y_stream_length)
+            print(z_stream_length)
 
             k = []
             for i in range(3):
@@ -114,7 +117,7 @@ class DecompressionPipeline:
             
             # Content
             points = stream.read(int(point_stream_length) * 8)
-            y_stream = stream.read(int(y_stream_length) * 8) # TODO: Check if we need to parse back to bytestring
+            y_stream = stream.read(int(y_stream_length) * 8) 
             z_stream = stream.read(int(z_stream_length) * 8)
             
             # Parse Content to bytes
