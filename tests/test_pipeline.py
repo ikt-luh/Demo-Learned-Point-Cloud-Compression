@@ -18,8 +18,8 @@ def load_point_cloud(file_path):
 
     # Create a dictionary to simulate a batch item
     batch_item = {
-        "points": torch.tensor(points[10000:10100], dtype=torch.float32),
-        "colors": torch.tensor(colors[10000:10100], dtype=torch.float32)
+        "points": torch.tensor(points[0:100100], dtype=torch.float32),
+        "colors": torch.tensor(colors[0:100100], dtype=torch.float32)
     }
 
     # Return as a list to simulate a batch (one item batch)
