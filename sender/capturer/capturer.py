@@ -15,7 +15,7 @@ class Capturer():
         self.camera = camera
         self.decimate = 0
         self.depth_clip = -1.0
-        self.voxel_size = 0.002
+        self.voxel_size = 0.004 # Higher = less voxels
 
         # Camera setup
         if self.camera == "realsense":

@@ -129,9 +129,7 @@ class CompressionPipeline:
     def analysis_step(self, data):
         """ Step 1: Analysis (GPU) """
         t0 = time.time()
-        print(data)
         y, k = self.compression_model.g_a(data)
-        print(k)
         torch.cuda.synchronize()
 
         y = utils.sort_tensor(y)
@@ -216,7 +214,6 @@ class CompressionPipeline:
         t0 = time.time()
         
         gaussian_params_feats = gaussian_params.features_at_coordinates(y.C.float())
-        print(gaussian_params_feats[0])
 
         gaussian_params = utils.get_features_per_batch(gaussian_params_feats, y.C)
         y_feats = utils.get_features_per_batch(y)
