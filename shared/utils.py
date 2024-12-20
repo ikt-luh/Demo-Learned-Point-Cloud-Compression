@@ -232,7 +232,7 @@ def gpcc_decode(data, tmp_dir, bin_dir):
     
     # Load ply
     pcd = o3d.io.read_point_cloud(tmp_dir)
-    points = np.asarray(pcd.points * 8)
+    points = np.asarray(pcd.points) * 8
 
     # Clean up
     os.remove(tmp_dir)

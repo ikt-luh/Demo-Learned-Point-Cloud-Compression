@@ -91,7 +91,7 @@ class DecompressionPipeline:
 
         y_strings, z_strings = [], []
         y_shapes, z_shapes = [], []
-        points_streams, ks = [], []
+        points_streams, ks = [], [[],[],[]]
 
         # Header
         num_frames = stream.read(np.int32)
@@ -112,11 +112,9 @@ class DecompressionPipeline:
             print(y_stream_length)
             print(z_stream_length)
 
-            k = []
-            for i in range(3):
-                k_level = stream.read(np.int32)
-                k.append(k_level)
-            print(k)
+            ks[0].append(stream.read(np.int32))
+            ks[1].append(stream.read(np.int32))
+            ks[2].append(stream.read(np.int32))
             
 
             # Content
@@ -136,7 +134,6 @@ class DecompressionPipeline:
             print(len(stream))
             
             # Sort into datastructures
-            ks.append(k)
             y_shapes.append(y_shape)
             z_shapes.append(z_shape)
             y_strings.append(y_stream)
@@ -285,7 +282,7 @@ class DecompressionPipeline:
         t1 = time.time()
         return reconstructed_pointcloud, t1 - t0
 
-    def pack_batches(self, pointcloud, num_frames=3):
+    def pack_batches(self, pointcloud, num_frames=1):
         """ Step 7: Postprocessing and packing. """
         t0 = time.time()
 
@@ -300,7 +297,7 @@ class DecompressionPipeline:
             # Extract batch-specific points and colors
             batch_indices = points[:, 0] == i  # Match batch index
             item_points = points[batch_indices][:, 1:]  # Exclude batch index
-            item_colors = colors[batch_indices][:, 1:]  # Exclude dummy ones column
+            item_colors = colors[batch_indices][:]  
 
             # Handle NaN values in colors
             item_colors = np.nan_to_num(item_colors, nan=0.0)  # Replace NaNs with 0

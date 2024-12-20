@@ -129,7 +129,9 @@ class CompressionPipeline:
     def analysis_step(self, data):
         """ Step 1: Analysis (GPU) """
         t0 = time.time()
+        print(data)
         y, k = self.compression_model.g_a(data)
+        print(k)
         torch.cuda.synchronize()
 
         y = utils.sort_tensor(y)
@@ -298,7 +300,6 @@ class CompressionPipeline:
             points = points_streams[i]
             y_string, z_string = y_strings[i], z_strings[i]
             y_shape, z_shape = y_shapes[i], z_shapes[i]
-            k = ks[i]
             q = q
 
             # Header
@@ -308,8 +309,9 @@ class CompressionPipeline:
             stream.write(len(y_string[0]), np.int32)
             stream.write(len(z_string[0]), np.int32)
 
-            for k_level in k:
-                stream.write(k_level, np.int32)
+            stream.write(ks[0][i], np.int32)
+            stream.write(ks[1][i], np.int32)
+            stream.write(ks[2][i], np.int32)
 
             # Content
             stream.write(points, bytes)
@@ -321,7 +323,9 @@ class CompressionPipeline:
             print("points_len: \t{}".format(len(points)))
             print("y_len: \t\t{}".format(len(y_string[0])))
             print("z_len: \t\t{}".format(len(z_string[0])))
-            print("k's: \t{}".format(k))
+            print("k1: \t{}".format(ks[0][i]))
+            print("k2: \t{}".format(ks[1][i]))
+            print("k3: \t{}".format(ks[2][i]))
             print("-----------")
 
         bit_string = stream.__str__()

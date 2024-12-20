@@ -16,13 +16,10 @@ def load_point_cloud(file_path):
     points = np.asarray(pcd.points)  # (N, 3)
     colors = np.asarray(pcd.colors)  # (N, 3)
 
-    # Normalize colors to range [0, 1] (if not already normalized)
-    colors = colors / 255
-
     # Create a dictionary to simulate a batch item
     batch_item = {
-        "points": torch.tensor(points[:100], dtype=torch.float32),
-        "colors": torch.tensor(colors[:100], dtype=torch.float32)
+        "points": torch.tensor(points[10000:10100], dtype=torch.float32),
+        "colors": torch.tensor(colors[10000:10100], dtype=torch.float32)
     }
 
     # Return as a list to simulate a batch (one item batch)
