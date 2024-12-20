@@ -54,7 +54,7 @@ const quaternion = new THREE.Quaternion(); // To rotate based on the headset's o
     }
 
     // Apply scaling to fit the point cloud in the camera's view
-    const scaleFactor = 0.002;  // Scale down the point cloud
+    const scaleFactor = 0.01;  // Scale down the point cloud
     for (let i = 0; i < float32Array.length; i++) {
         float32Array[i] *= scaleFactor; // Scale coordinates
     }
@@ -63,7 +63,7 @@ const quaternion = new THREE.Quaternion(); // To rotate based on the headset's o
     if (!dynamicGeometry) {
         dynamicGeometry = new THREE.BufferGeometry();
         const material = new THREE.PointsMaterial({
-            size: 0.01,
+            size: 0.025,
             vertexColors: true,
         });
         const points = new THREE.Points(dynamicGeometry, material);
@@ -101,7 +101,7 @@ function centerPointCloud() {
     }
 
     // Translate geometry using the precomputed center
-    dynamicGeometry.translate(-initialCenter.x, -initialCenter.y, -initialCenter.z);
+    dynamicGeometry.translate(-initialCenter.x, -initialCenter.y + 1, -initialCenter.z);
 }
 
 

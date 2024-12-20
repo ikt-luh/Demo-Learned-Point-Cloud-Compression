@@ -112,11 +112,11 @@ class DecompressionPipeline:
             print(y_stream_length)
             print(z_stream_length)
 
+            #ks[0].append(int(stream.read(np.int32) * 1.2))
             ks[0].append(stream.read(np.int32))
             ks[1].append(stream.read(np.int32))
             ks[2].append(stream.read(np.int32))
             
-
             # Content
             print("Data")
             print(len(stream))
