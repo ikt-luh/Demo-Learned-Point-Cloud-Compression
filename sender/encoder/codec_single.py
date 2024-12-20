@@ -286,6 +286,7 @@ class CompressionPipeline:
         stream.write(num_frames, np.int32)
         stream.write(q[0, 0].cpu(), np.int32)
         stream.write(q[0, 1].cpu(), np.int32)
+        print("NUM FRAMES: {}".format(num_frames), flush=True)
 
         for i in range(num_frames):
             points = points_streams[i]
@@ -300,14 +301,16 @@ class CompressionPipeline:
             stream.write(len(points), np.int32)
             stream.write(len(y_string[0]), np.int32)
             stream.write(len(z_string[0]), np.int32)
-            print(len(points), len(y_string[0]), len(z_string[0]))
+            print(len(points))
+            print(len(y_string[0]))
+            print(len(z_string[0]))
             for k_level in k:
                 stream.write(k_level, np.int32)
 
             # Content
             stream.write(points)
-            stream.write(z_string[0])
             stream.write(y_string[0])
+            stream.write(z_string[0])
 
         bit_string = stream.__str__()
         #byte_array = bytes(int(bit_string[i:i+8], 2) for i in range(0, len(bit_string), 8))
