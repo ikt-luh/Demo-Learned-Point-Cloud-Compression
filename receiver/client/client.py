@@ -174,7 +174,8 @@ class StreamingClient:
 
 # Example usage
 if __name__ == "__main__":
-    mpd_url = "http://172.23.181.103:8080/media/manifest.mpd"
+    #mpd_url = "http://172.23.181.103:8080/media/manifest.mpd"
+    mpd_url = "http://192.168.2.189:8080/media/manifest.mpd"
     fixed_quality = 0
 
     client = StreamingClient(mpd_url, fixed_quality=fixed_quality)
