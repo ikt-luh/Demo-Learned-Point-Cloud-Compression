@@ -17,14 +17,15 @@ torch.use_deterministic_algorithms(True)
 class CompressionPipeline:
     def __init__(self):
         # Define GPU device
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         # Model
         base_path = "./unified/results/"
         self.compression_model = self.load_model(base_path)
         
     def load_model(self, base_path):
-        model_name = "model_inverse_nn"
+        model_name = "demo_small"
+        #model_name = "model_inverse_nn"
         config_path = os.path.join(base_path, model_name, "config.yaml")
         weights_path = os.path.join(base_path, model_name, "weights.pt")
 
@@ -32,7 +33,7 @@ class CompressionPipeline:
             config = yaml.safe_load(file)
 
         compression_model = model.ColorModel(config["model"])
-        compression_model.load_state_dict(torch.load(weights_path))
+        compression_model.load_state_dict(torch.load(weights_path, map_location=self.device))
 
         compression_model.to(self.device)
         compression_model.update()

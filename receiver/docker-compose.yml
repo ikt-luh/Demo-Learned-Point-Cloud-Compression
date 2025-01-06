@@ -3,6 +3,8 @@ services:
     build:
       context: ./client
     container_name: client
+    volumes:
+      - ../shared/:/app/shared/:ro
     environment:
       - ZMQ_PUSH_SOCKET="tcp://decoder:5555"
       - ZMQ_PULL_SOCKET="tcp://decoder:5555"
@@ -29,6 +31,8 @@ services:
   visualizer:
     build:
       context: ./visualizer
+    volumes:
+      - ../shared/:/app/shared/:ro
     container_name: visualizer
     ports:
       - "5173:5173"

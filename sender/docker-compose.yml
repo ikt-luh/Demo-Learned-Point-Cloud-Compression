@@ -7,6 +7,8 @@ services:
     privileged: true
     devices:
       - /dev/bus/usb:/dev/bus/usb  # Access the camera device
+    volumes:
+      - ../shared/:/app/shared/:ro
     device_cgroup_rules:
       - 'c 81:* rmw'
       - 'c 189:* rmw'
@@ -38,6 +40,7 @@ services:
       context: ./media_server
     container_name: mediaserver
     volumes:
+      - ../shared/:/app/shared/:ro
       - type: tmpfs
         target: /media
         tmpfs:

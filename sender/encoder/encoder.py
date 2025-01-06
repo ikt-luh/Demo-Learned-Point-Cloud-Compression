@@ -11,20 +11,30 @@ import torch
 from codec_single import CompressionPipeline
 
 class Encoder:
-    def __init__(self, max_queue_size=60, target_fps=3, gop_size=3, segment_duration=1.0):
+    def __init__(self, config_file=None): #max_queue_size=60, target_fps=3, gop_size=3, segment_duration=1.0):
+        # Load settings from YAML if a file is provided
+        if config_file:
+            with open(config_file, 'r') as file:
+                config = yaml.safe_load(file)
+        else:
+            config = {}
+
+        # Set defaults and override with YAML values
+        self.max_queue_size = config.get("max_queue_size", 60)
+        self.target_fps = config.get("target_fps", 3)
+        self.gop_size = config.get("gop_size", 3)
+        self.segment_duration = config.get("segment_duration", 1.0)
+        self.push_address = config.get("encoder_push_address", "tcp://mediaserver:5556")
+        self.pull_address = config.get("encoder_pull_address", "tcp://*:5555")
+        
         # ZeroMQ
         context = zmq.Context()
 
         self.push_socket = context.socket(zmq.PUSH)
-        self.push_socket.connect("tcp://mediaserver:5556")
+        self.push_socket.connect(self.push_address)
 
         self.pull_socket = context.socket(zmq.PULL)
-        self.pull_socket.bind("tcp://*:5555")
-
-        # GoP and Framerate Handling
-        self.target_fps = target_fps
-        self.gop_size = gop_size
-        self.segment_duration = segment_duration
+        self.pull_socket.bind(self.pull_address)
 
         # Thread-safe queue for batches
         self.batch_queue = queue.Queue()
@@ -134,5 +144,5 @@ class Encoder:
 
             
 if __name__ == "__main__":
-    enc = Encoder()
+    enc = Encoder(config_file="./shared/config.yaml")
     enc.run()

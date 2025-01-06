@@ -1,6 +1,6 @@
+import yaml
 import pickle
 import zmq
-#import pyrealsense2 as rs
 import pyzed.sl as sl
 import numpy as np
 import time
@@ -8,24 +8,30 @@ import open3d as o3d
 
 
 class Capturer():
-    def __init__(self, camera="zed"):
-        """
-        Constructor
-        """
-        self.camera = camera
-        self.decimate = 0
-        self.depth_clip = -1.0
-        self.voxel_size = 0.004 # Higher = less voxels
+    def __init__(self, config_file=None): 
+        # Load settings from YAML if a file is provided
+        if config_file:
+            with open(config_file, 'r') as file:
+                config = yaml.safe_load(file)
+        else:
+            config = {}
+
+        self.camera = config.get("camera")
+        self.decimate = config.get("decimate", 0)
+        self.depth_clip = config.get("depth_clip", -1.5)
+        self.voxel_size = config.get("voxel_size", 0.01)
+        self.capturer_push_address = config.get("capturer_push_address")
 
         # Camera setup
         if self.camera == "realsense":
             self.setup_realsense()
         elif self.camera == "zed":
             self.setup_zed()
+
         # ZMQ
         context = zmq.Context()
         self.socket = context.socket(zmq.PUSH)
-        self.socket.connect("tcp://encoder:5555")
+        self.socket.connect(self.capturer_push_address)
         
 
     def run(self):
@@ -105,14 +111,15 @@ class Capturer():
     def setup_zed(self):
         """
         """
-        init = sl.InitParameters(depth_mode=sl.DEPTH_MODE.QUALITY,
+        init = sl.InitParameters(depth_mode=sl.DEPTH_MODE.PERFORMANCE,
                 coordinate_units=sl.UNIT.METER,
                 coordinate_system=sl.COORDINATE_SYSTEM.RIGHT_HANDED_Y_UP)
         init.camera_resolution = sl.RESOLUTION.HD1080
 
         self.res = sl.Resolution()
-        self.res.width = 960
-        self.res.height = 540
+        print(self.res.width, flush=True)
+        self.res.width = 1280
+        self.res.height = 720
 
         self.zed = sl.Camera()
         status = self.zed.open(init)
@@ -155,7 +162,15 @@ class Capturer():
             downsampled_pointcloud = o3d_pointcloud.voxel_down_sample(self.voxel_size)
             points = np.asarray(downsampled_pointcloud.points)
             colors = np.asarray(downsampled_pointcloud.colors)
-            points = np.round(points / self.voxel_size).astype(np.int16)
+            points = np.round(points / (self.voxel_size)).astype(np.int16)
+
+            # Remove duplicates
+            _, unique_indices = np.unique(points, axis=0, return_index=True)
+            points = points[unique_indices]
+            colors = colors[unique_indices]
+
+            min_coords = np.min(points, axis=0)
+            max_coords = np.max(points, axis=0)
 
             data = { "points": points, "colors": colors, "timestamp": t0 }
         return data
@@ -166,5 +181,5 @@ class Capturer():
 
 
 if __name__ == "__main__":
-    capturer = Capturer()
+    capturer = Capturer("./shared/config.yaml")
     capturer.run()

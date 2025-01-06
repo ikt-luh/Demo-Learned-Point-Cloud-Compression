@@ -1,6 +1,7 @@
 import math
 import sys
 import os
+import yaml
 import time
 import zmq
 import pickle
@@ -14,10 +15,20 @@ shared_epoch = datetime(2024, 1, 1, 0, 0, 0).timestamp()
 
 
 class StreamingServer:
-    def __init__(self, ip_addr, port=8080, output_directory="./media", segment_duration=1.0):
+    def __init__(self, config_file=None):
+        # Load settings from YAML if a file is provided
+        if config_file:
+            with open(config_file, 'r') as file:
+                config = yaml.safe_load(file)
+        else:
+            config = {}
         # Setup directories and MPD Manager
-        self.ip_addr = ip_addr
-        self.output_directory = output_directory
+        self.ip_addr = config.get("ip_addr")
+        self.port = config.get("port")
+        self.output_directory = config.get("output_directory")
+        self.segment_duration = config.get("segment_duration")
+        self.pull_address = config.get("media_server_pull_address")
+
         os.makedirs(self.output_directory, exist_ok=True)
 
         self.mpd_manager = MPDManager(self.output_directory)
@@ -25,10 +36,8 @@ class StreamingServer:
 
         self.context = zmq.Context()
         self.pull_socket = self.context.socket(zmq.PULL)
-        self.pull_socket.bind("tcp://*:5556")
+        self.pull_socket.bind(self.pull_address)
 
-        self.port = port
-        self.segment_duration = segment_duration
         self.segment_buffer = deque()
         self.buffer_lock = threading.Lock()
         self.io_lock = threading.Lock()
@@ -150,12 +159,7 @@ class StreamingServer:
 
 
 if __name__ == "__main__":
-    # Initialize server
-    ip_addr = "0.0.0.0"
-    port = 8080
-    segment_duration = 1.0  # Set segment duration in seconds
-
-    server = StreamingServer(ip_addr, port=port, segment_duration=segment_duration)
+    server = StreamingServer(config_file="./shared/config.yaml")
 
     threading.Thread(target=server.start_http_server, daemon=True).start()
 
