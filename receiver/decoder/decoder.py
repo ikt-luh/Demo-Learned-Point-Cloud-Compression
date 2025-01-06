@@ -20,6 +20,7 @@ class Decoder:
         with open(config_file, 'r') as file:
             config = yaml.safe_load(file) 
 
+        self.queue_cleanup_threshold = 2
         self.max_queue_size = config.get("max_queue_size")
         self.decoder_push_address = config.get("decoder_push_address")
         self.decoder_pull_address = config.get("decoder_pull_address")
@@ -36,21 +37,51 @@ class Decoder:
 
         self.codec = DecompressionPipeline()
 
-
-    def run(self):
-        """
-        Main loop
-        """
+    def fill_queue(self):
         while True:
             data = self.pull_socket.recv()
             data = pickle.loads(data)
             print("Received data", flush=True)
 
-            data_bitstream = data[0]
-            decompressed_batch = self.codec.decompress(data_bitstream)
+            # Cleanup if queue exceeds threshold
+            if self.queue.qsize() > self.queue_cleanup_threshold:
+                print("Queue exceeded cleanup threshold. Dropping excess data.", flush=True)
+                with self.queue.mutex:
+                    self.queue.queue.clear()
 
-            decompressed_batch = pickle.dumps(decompressed_batch)
-            self.push_socket.send(decompressed_batch)
+            # Enqueue data
+            self.queue.put(data, timeout=0.1)
+
+    def decode(self):
+        """
+        Thread to decode data and push it back directly.
+        """
+        while True:
+            if self.queue.qsize() > 0:
+                data = self.queue.get(timeout=1)  # Retrieve data from queue
+                data_bitstream = data[0]
+                decompressed_batch = self.codec.decompress(data_bitstream)
+
+                # Send decompressed data back via the socket
+                self.push_socket.send(pickle.dumps(decompressed_batch))
+            else:
+                time.sleep(0.05)
+
+
+
+    def run(self):
+        """
+        Start all threads.
+        """
+        fill_thread = threading.Thread(target=self.fill_queue, daemon=True)
+        decode_push_thread = threading.Thread(target=self.decode, daemon=True)
+
+        fill_thread.start()
+        decode_push_thread.start()
+
+        while True:
+            time.sleep(1)
+
     
 
 if __name__ == "__main__":

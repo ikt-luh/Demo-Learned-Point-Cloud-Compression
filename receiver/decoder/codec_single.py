@@ -43,28 +43,29 @@ class DecompressionPipeline:
         Main decompression pipeline method.
         Runs all steps from bitstream reading to reconstruction.
         """
-        t_start = time.time()
+        with torch.no_grad():
+            t_start = time.time()
 
-        # Step 1 (Bitstream Reading)
-        y_strings, z_strings, y_shapes, z_shapes, points_streams, ks, q, t_1 = self.read_bitstream(compressed_data)
+            # Step 1 (Bitstream Reading)
+            y_strings, z_strings, y_shapes, z_shapes, points_streams, ks, q, t_1 = self.read_bitstream(compressed_data)
 
-        # Step 2 (Geometry Decompression)
-        y_points, t_2 = self.geometry_decompression_step(points_streams)
+            # Step 2 (Geometry Decompression)
+            y_points, t_2 = self.geometry_decompression_step(points_streams)
 
-        # Step 3 (Factorized Entropy Model)
-        z_hats, t_3 = self.factorized_model_step(z_strings, z_shapes, y_points)
+            # Step 3 (Factorized Entropy Model)
+            z_hats, t_3 = self.factorized_model_step(z_strings, z_shapes, y_points)
 
-        # Step 4 (Hyper Synthesis)
-        gaussian_params, t_4 = self.hyper_synthesis_step(z_hats)
+            # Step 4 (Hyper Synthesis)
+            gaussian_params, t_4 = self.hyper_synthesis_step(z_hats)
 
-        # Step 5 (Gaussian Entropy Model)
-        y_hat, t_5 = self.gaussian_model_step(y_strings, y_shapes, y_points, q, gaussian_params)
+            # Step 5 (Gaussian Entropy Model)
+            y_hat, t_5 = self.gaussian_model_step(y_strings, y_shapes, y_points, q, gaussian_params)
 
-        # Step 6 (Hyper Synthesis)
-        reconstructed_pointcloud, t_6 = self.hyper_synthesis(y_hat, ks)
+            # Step 6 (Hyper Synthesis)
+            reconstructed_pointcloud, t_6 = self.hyper_synthesis(y_hat, ks)
 
-        # Postprocessing: Pack data back into batches
-        final_data, t_7 = self.pack_batches(reconstructed_pointcloud)
+            # Postprocessing: Pack data back into batches
+            final_data, t_7 = self.pack_batches(reconstructed_pointcloud)
 
         # Logging
         t_sum = t_1 + t_2 + t_3 + t_4 + t_5 + t_6 + t_7
