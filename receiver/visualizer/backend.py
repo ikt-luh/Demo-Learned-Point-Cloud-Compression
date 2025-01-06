@@ -17,7 +17,6 @@ async def handler(websocket):
             data = await zmq_socket.recv()
             
             # Send  data to WebSocket client
-            print("Bridging data", flush=True)
             await websocket.send(data)  # Assuming the data is a string, adjust as needed
 
     except websocket.exceptions.ConnectionClosed:

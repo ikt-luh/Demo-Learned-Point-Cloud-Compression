@@ -23,8 +23,8 @@ class StreamingClient:
         self.bandwidth = config.get("bandwidth", 1000) 
         self.request_offset = config.get("request_offset")
         self.target_fps = config.get("target_fps")
-        self.decoder_push_address = config.get("decoder_push_address")
-        self.decoder_pull_address = config.get("decoder_pull_address")
+        self.decoder_push_address = config.get("client_push_address")
+        self.decoder_pull_address = config.get("client_pull_address")
         self.visualizer_push_address = config.get("visualizer_push_address")
 
         self.segment_duration = None
@@ -123,8 +123,7 @@ class StreamingClient:
         """Receives processed data from the decoder."""
         while True:
             decoded_data = self.decoder_pull_socket.recv()
-
-            packet = self.prepare_for_rendering(decoded_data)
+            self.prepare_for_rendering(decoded_data)
 
 
     def visualizer_sender(self):
@@ -165,7 +164,6 @@ class StreamingClient:
                 self.playout_buffer.append(data)
 
         
-        return pickle.dumps(data)
 
     def start(self):
         """Starts all threads."""

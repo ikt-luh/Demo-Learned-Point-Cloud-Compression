@@ -88,7 +88,6 @@ class DecompressionPipeline:
         
         stream = BitStream()
         stream.write(compressed_data, bytes)
-        print(len(stream))
 
         y_strings, z_strings = [], []
         y_shapes, z_shapes = [], []
@@ -109,30 +108,17 @@ class DecompressionPipeline:
             y_stream_length = stream.read(np.int32)
             z_stream_length = stream.read(np.int32)
 
-            print(point_stream_length)
-            print(y_stream_length)
-            print(z_stream_length)
-
             #ks[0].append(int(stream.read(np.int32) * 1.2))
             ks[0].append(stream.read(np.int32))
             ks[1].append(stream.read(np.int32))
             ks[2].append(stream.read(np.int32))
             
             # Content
-            print("Data")
-            print(len(stream))
             points = stream.read(bytes, int(point_stream_length))
-            #points = int(points, 2).to_bytes(len(points) // 8, byteorder='big')
-            print(len(points))
 
             y_stream = stream.read(bytes, int(y_stream_length))
-            #y_stream = int(y_stream, 2).to_bytes(len(y_stream) // 8, byteorder='big')
-            print(len(y_stream))
 
             z_stream = stream.read(bytes, int(z_stream_length))
-            #z_stream = int(z_stream, 2).to_bytes(len(z_stream) // 8, byteorder='big')
-            print(len(z_stream))
-            print(len(stream))
             
             # Sort into datastructures
             y_shapes.append(y_shape)
@@ -180,7 +166,6 @@ class DecompressionPipeline:
             tensor_stride=8,
             device=self.device
         )
-        print(latent_coordinates.C.shape)
         latent_coordinates = self.decompression_model.g_s.down_conv(latent_coordinates)
         latent_coordinates = self.decompression_model.g_s.down_conv(latent_coordinates)
 
@@ -283,7 +268,7 @@ class DecompressionPipeline:
         t1 = time.time()
         return reconstructed_pointcloud, t1 - t0
 
-    def pack_batches(self, pointcloud, num_frames=1):
+    def pack_batches(self, pointcloud):
         """ Step 7: Postprocessing and packing. """
         t0 = time.time()
 
@@ -292,9 +277,11 @@ class DecompressionPipeline:
         colors = pointcloud.F.cpu().numpy()  # Convert to NumPy on CPU
 
         # Initialize the batch list
+        num_frames = np.max(points[:, 0])
         batch = []
 
         for i in range(num_frames):
+            print("BATCHING FRAME {}".format(i), flush=True)
             # Extract batch-specific points and colors
             batch_indices = points[:, 0] == i  # Match batch index
             item_points = points[batch_indices][:, 1:]  # Exclude batch index

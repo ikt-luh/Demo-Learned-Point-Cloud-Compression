@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { VRButton } from 'three/addons/webxr/VRButton.js';
+//import { VRButton } from 'three/addons/webxr/VRButton.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 // Initialize Scene, Camera, Renderer
 const scene = new THREE.Scene();
@@ -10,9 +11,18 @@ camera.position.set(0, 1, 3); // Position the camera for VR
 
 const renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.xr.enabled = true; // Enable WebXR for VR functionality
+//renderer.xr.enabled = true; // Enable WebXR for VR functionality
 document.body.appendChild(renderer.domElement);
-document.body.appendChild(VRButton.createButton(renderer));
+//document.body.appendChild(VRButton.createButton(renderer));
+
+
+// Add OrbitControls
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; // Smooth out the motion
+controls.dampingFactor = 0.1;
+controls.screenSpacePanning = false; // Prevent panning up and down
+controls.minDistance = 0.5; // Minimum zoom distance
+controls.maxDistance = 10; // Maximum zoom distance
 
 // Movement variables
 const movementSpeed = 0.05; // Adjust the speed of movement
@@ -54,7 +64,7 @@ const quaternion = new THREE.Quaternion(); // To rotate based on the headset's o
     }
 
     // Apply scaling to fit the point cloud in the camera's view
-    const scaleFactor = 0.01;  // Scale down the point cloud
+    const scaleFactor = 0.005;  // Scale down the point cloud
     for (let i = 0; i < float32Array.length; i++) {
         float32Array[i] *= scaleFactor; // Scale coordinates
     }
@@ -109,6 +119,8 @@ function centerPointCloud() {
 // Animate and Render Scene
 function animate() {
     renderer.setAnimationLoop(() => {
+        requestAnimationFrame(animate);
+        controls.update();
         renderer.render(scene, camera);
     });
 }
