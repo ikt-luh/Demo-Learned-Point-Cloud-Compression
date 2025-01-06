@@ -22,3 +22,17 @@ output_directory: "./media"
 
 
 ### RECEIVER ###
+# Client
+mpd_url: "http://172.23.181.103:8080/media/manifest.mpd"
+client_buffer_size: 10
+fixed_quality: 0
+bandwidth: 1000  # Example: 1000 kbps
+request_offset: 0.8
+client_push_address: "tcp://decoder:5555"
+client_pull_address: "tcp://*:5555"
+visualizer_push_address: "tcp://visualizer:5556"
+
+
+# Decoder
+decoder_push_address: "tcp://client:5555"
+decoder_pull_address: "tcp://*:5555"
