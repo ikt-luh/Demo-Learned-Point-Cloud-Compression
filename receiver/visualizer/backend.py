@@ -1,5 +1,6 @@
 import asyncio
 import websockets
+import yaml
 import zmq
 import zmq.asyncio
 

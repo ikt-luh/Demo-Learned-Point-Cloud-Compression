@@ -5,6 +5,7 @@ import time
 import requests
 import math
 import zmq
+import yaml
 import numpy as np
 from datetime import datetime
 from mpd_parser import MPDParser
@@ -12,28 +13,37 @@ from mpd_parser import MPDParser
 shared_epoch = datetime(2024, 1, 1, 0, 0, 0).timestamp()
 
 class StreamingClient:
-    def __init__(self, mpd_url, fixed_quality=None):
-        self.mpd_url = mpd_url
-        self.buffer = []
-        self.max_buffer_size = 10
-        self.downloaded_segments = set()
+    def __init__(self, config_file): 
+        with open(config_file, 'r') as file:
+            config = yaml.safe_load(file)
+
+        self.mpd_url = config.get("mpd_url")
+        self.max_buffer_size = config.get("client_buffer_size")
+        self.fixed_quality = config.get("fixed_quality", None)
+        self.bandwidth = config.get("bandwidth", 1000) 
+        self.request_offset = config.get("request_offset")
+        self.target_fps = config.get("target_fps")
+        self.decoder_push_address = config.get("decoder_push_address")
+        self.decoder_pull_address = config.get("decoder_pull_address")
+        self.visualizer_push_address = config.get("visualizer_push_address")
+
         self.segment_duration = None
         self.last_publish_time = None
         self.mpd_data = None
-        self.fixed_quality = fixed_quality
-        self.bandwidth = 1000  # Example: 1000 kbps
-        self.request_offset = 0.8
-        self.target_fps = 3
+
+        self.buffer = []
+        self.downloaded_segments = set()
         
         # ZMQ setup
         context = zmq.Context()
         self.decoder_push_socket = context.socket(zmq.PUSH)
-        self.decoder_push_socket.connect("tcp://decoder:5555")
+        self.decoder_push_socket.connect(self.decoder_push_address)
+
         self.decoder_pull_socket = context.socket(zmq.PULL)
-        self.decoder_pull_socket.bind("tcp://*:5555")
+        self.decoder_pull_socket.bind(self.decoder_pull_address)
 
         self.visualizer_socket = context.socket(zmq.PUSH)
-        self.visualizer_socket.connect("tcp://visualizer:5556")
+        self.visualizer_socket.connect(self.visualizer_push_address)
 
         # Locks for thread safety
         self.playout_buffer_lock = threading.Lock()
@@ -174,9 +184,5 @@ class StreamingClient:
 
 # Example usage
 if __name__ == "__main__":
-    #mpd_url = "http://172.23.181.103:8080/media/manifest.mpd"
-    mpd_url = "http://192.168.2.189:8080/media/manifest.mpd"
-    fixed_quality = 0
-
-    client = StreamingClient(mpd_url, fixed_quality=fixed_quality)
+    client = StreamingClient("./shared/config.yaml")
     client.start()

@@ -14,14 +14,15 @@ torch.set_grad_enabled(False)
 class DecompressionPipeline:
     def __init__(self):
         # Define GPU device
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         # Model
         base_path = "./unified/results/"
         self.decompression_model = self.load_model(base_path)
 
     def load_model(self, base_path):
-        model_name = "model_inverse_nn"
+        #model_name = "model_inverse_nn"
+        model_name = "demo_small"
         config_path = os.path.join(base_path, model_name, "config.yaml")
         weights_path = os.path.join(base_path, model_name, "weights.pt")
 
@@ -29,7 +30,7 @@ class DecompressionPipeline:
             config = yaml.safe_load(file)
 
         decompression_model = model.ColorModel(config["model"])
-        decompression_model.load_state_dict(torch.load(weights_path))
+        decompression_model.load_state_dict(torch.load(weights_path, map_location=self.device))
 
         decompression_model.to(self.device)
         decompression_model.update()
@@ -72,7 +73,7 @@ class DecompressionPipeline:
         print("Step 3 (Factorized Model): \t {:.3f} seconds".format(t_3), flush=True)
         print("Step 4 (Hyper Synthesis): \t {:.3f} seconds".format(t_4), flush=True)
         print("Step 5 (Gaussian Model): \t\t {:.3f} seconds".format(t_5), flush=True)
-        print("Step 6 (Hyper Synthesis): \t {:.3f} seconds".format(t_6), flush=True)
+        print("Step 6 (Synthesis): \t\t {:.3f} seconds".format(t_6), flush=True)
         print("Step 7 (Postprocessing): \t\t {:.3f} seconds".format(t_7), flush=True)
         print("-------------------------------------------------", flush=True)
         print("Decoding Total: \t\t {:.3f} seconds".format(t_sum), flush=True)
