@@ -132,12 +132,13 @@ class StreamingClient:
         # This will require the qualities available and the current estimated bandwidth
         quality = self.decide_quality()
         data = self.download_segment(quality, next_segment_number)
+        codec_info = self.mpd_data['periods'][0]["adaptation_sets"][0]["representations"][quality]["codecs"]
         if LOG:
             print("Downloaded segment {}".format(next_segment_number, flush=True))
 
         if data:
             self.downloaded_segments.put(next_segment_number)
-            self.decoder_push_socket.send(data)
+            self.decoder_push_socket.send(pickle.dumps([codec_info, data]))
         else: 
             print("segment_downloader: Not downloaded...", flush=True)
 

@@ -58,12 +58,19 @@ class Decoder:
         while True:
             if self.queue.qsize() > 0:
                 data = self.queue.get(timeout=1)  # Retrieve data from queue
-                data_bitstream = data[0]
-                print("{} Sending to decoder".format(time.time()), flush=True)
-                decompressed_batch = self.codec.decompress(data_bitstream)
+                codec_info, data = data #pickle.loads(data)
+                data = pickle.loads(data)
 
-                # Send decompressed data back via the socket
-                self.push_socket.send(pickle.dumps(decompressed_batch))
+                if codec_info == "unified":
+                    data_bitstream = data
+                    print("{} Sending to decoder".format(time.time()), flush=True)
+                    decompressed_batch = self.codec.decompress(data_bitstream)
+
+                    # Send decompressed data back via the socket
+                    self.push_socket.send(pickle.dumps(decompressed_batch))
+                else:
+                    print(pickle.loads(data))
+                    self.push_socket.send(data)
             else:
                 time.sleep(0.05)
 
