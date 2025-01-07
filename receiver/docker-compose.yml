@@ -5,12 +5,15 @@ services:
     container_name: client
     volumes:
       - ../shared/:/app/shared/:ro
+      - /tmp/.X11-unix:/tmp/.X11-unix
     environment:
       - ZMQ_PUSH_SOCKET="tcp://decoder:5555"
       - ZMQ_PULL_SOCKET="tcp://decoder:5555"
       - ZMQ_PUSH_SOCKET="tcp://visualizer:5555"
     networks:
       - receiver_network
+    ports:
+      - "5000:5000"
 
   decoder:
     build:

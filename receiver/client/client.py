@@ -9,7 +9,9 @@ import yaml
 import numpy as np
 from queue import Queue
 from datetime import datetime
+
 from mpd_parser import MPDParser
+from controls import create_flask_app
 
 LOG = True
 
@@ -52,8 +54,7 @@ class StreamingClient:
         self.visualizer_socket = context.socket(zmq.PUSH)
         self.visualizer_socket.connect(self.visualizer_push_address)
 
-
-
+ 
     def initilize_stream(self):
         """
         Initialize the stream by trying to get the MPD
@@ -199,8 +200,11 @@ class StreamingClient:
         threading.Thread(target=self.mpd_updater, daemon=True).start()
         threading.Thread(target=self.decoder_receiver, daemon=True).start()
         threading.Thread(target=self.visualizer_sender, daemon=True).start()
+        
+        # GUI
+        gui = create_flask_app(self)
+        threading.Thread(target=lambda: gui.run(host="0.0.0.0", port=5000), daemon=True).start()
 
-        # Keep main thread alive
         while True:
             time.sleep(1)
 
