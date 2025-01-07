@@ -41,16 +41,15 @@ class Decoder:
         while True:
             data = self.pull_socket.recv()
             data = pickle.loads(data)
-            print("Received data", flush=True)
+            print("{} Received data".format(time.time()), flush=True)
 
             # Cleanup if queue exceeds threshold
-            if self.queue.qsize() > self.queue_cleanup_threshold:
+            while self.queue.qsize() > self.queue_cleanup_threshold:
                 print("Queue exceeded cleanup threshold. Dropping excess data.", flush=True)
-                with self.queue.mutex:
-                    self.queue.queue.clear()
+                _ = self.queue.get()
 
             # Enqueue data
-            self.queue.put(data, timeout=0.1)
+            self.queue.put(data)
 
     def decode(self):
         """
@@ -60,6 +59,7 @@ class Decoder:
             if self.queue.qsize() > 0:
                 data = self.queue.get(timeout=1)  # Retrieve data from queue
                 data_bitstream = data[0]
+                print("{} Sending to decoder".format(time.time()), flush=True)
                 decompressed_batch = self.codec.decompress(data_bitstream)
 
                 # Send decompressed data back via the socket

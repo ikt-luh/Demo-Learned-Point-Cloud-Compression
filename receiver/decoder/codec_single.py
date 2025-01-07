@@ -9,6 +9,8 @@ from bitstream import BitStream
 import shared.utils as utils
 from unified.model import model
 
+LOG = False
+
 torch.set_grad_enabled(False)
 
 class DecompressionPipeline:
@@ -19,6 +21,7 @@ class DecompressionPipeline:
         # Model
         base_path = "./unified/results/"
         self.decompression_model = self.load_model(base_path)
+        print("Pipleine Initialized", flush=True)
 
     def load_model(self, base_path):
         #model_name = "model_inverse_nn"
@@ -69,15 +72,16 @@ class DecompressionPipeline:
 
         # Logging
         t_sum = t_1 + t_2 + t_3 + t_4 + t_5 + t_6 + t_7
-        print("Step 1 (Bitstream Reading): \t {:.3f} seconds".format(t_1), flush=True)
-        print("Step 2 (Geometry Decompression): \t {:.3f} seconds".format(t_2), flush=True)
-        print("Step 3 (Factorized Model): \t {:.3f} seconds".format(t_3), flush=True)
-        print("Step 4 (Hyper Synthesis): \t {:.3f} seconds".format(t_4), flush=True)
-        print("Step 5 (Gaussian Model): \t\t {:.3f} seconds".format(t_5), flush=True)
-        print("Step 6 (Synthesis): \t\t {:.3f} seconds".format(t_6), flush=True)
-        print("Step 7 (Postprocessing): \t\t {:.3f} seconds".format(t_7), flush=True)
-        print("-------------------------------------------------", flush=True)
-        print("Decoding Total: \t\t {:.3f} seconds".format(t_sum), flush=True)
+        if LOG:
+            print("Step 1 (Bitstream Reading): \t {:.3f} seconds".format(t_1), flush=True)
+            print("Step 2 (Geometry Decompression): \t {:.3f} seconds".format(t_2), flush=True)
+            print("Step 3 (Factorized Model): \t {:.3f} seconds".format(t_3), flush=True)
+            print("Step 4 (Hyper Synthesis): \t {:.3f} seconds".format(t_4), flush=True)
+            print("Step 5 (Gaussian Model): \t\t {:.3f} seconds".format(t_5), flush=True)
+            print("Step 6 (Synthesis): \t\t {:.3f} seconds".format(t_6), flush=True)
+            print("Step 7 (Postprocessing): \t\t {:.3f} seconds".format(t_7), flush=True)
+            print("-------------------------------------------------", flush=True)
+            print("Decoding Total: \t\t {:.3f} seconds".format(t_sum), flush=True)
 
         t_end = time.time()
         print("Decompression time: {:.3f} sec".format(t_end - t_start))
@@ -282,19 +286,14 @@ class DecompressionPipeline:
         batch = []
 
         for i in range(num_frames):
-            print("BATCHING FRAME {}".format(i), flush=True)
-            # Extract batch-specific points and colors
             batch_indices = points[:, 0] == i  # Match batch index
             item_points = points[batch_indices][:, 1:]  # Exclude batch index
             item_colors = colors[batch_indices][:]  
 
-            # Handle NaN values in colors
             item_colors = np.nan_to_num(item_colors, nan=0.0)  # Replace NaNs with 0
 
-            # Scale colors to [0, 255] and convert to int8
             item_colors = np.clip(item_colors * 255.0, 0, 255) / 255
 
-            # Create a data dictionary for this batch
             data = {
                 "points": item_points,  # Shape: (N, D)
                 "colors": item_colors,  # Shape: (N, C), scaled to int8

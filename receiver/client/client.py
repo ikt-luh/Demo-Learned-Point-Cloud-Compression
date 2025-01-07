@@ -11,6 +11,8 @@ from queue import Queue
 from datetime import datetime
 from mpd_parser import MPDParser
 
+LOG = False
+
 shared_epoch = datetime(2024, 1, 1, 0, 0, 0).timestamp()
 
 class StreamingClient:
@@ -48,7 +50,6 @@ class StreamingClient:
 
         self.visualizer_socket = context.socket(zmq.PUSH)
         self.visualizer_socket.connect(self.visualizer_push_address)
-
 
 
     def initilize_stream(self):
@@ -127,7 +128,8 @@ class StreamingClient:
         # This will require the qualities available and the current estimated bandwidth
         quality = self.decide_quality()
         data = self.download_segment(quality, next_segment_number)
-        print("Downloaded segment {}".format(next_segment_number, flush=True))
+        if LOG:
+            print("Downloaded segment {}".format(next_segment_number, flush=True))
 
         if data:
             self.downloaded_segments.put(next_segment_number)
@@ -148,10 +150,11 @@ class StreamingClient:
         while True:
             timestamp = datetime.now().timestamp()
 
-            print("Playoutbufer size: {} Frames, {} sec.".format(
-                self.playout_buffer.qsize(), 
-                self.playout_buffer.qsize() * (1 / self.target_fps)
-                ), flush=True)
+            if LOG:
+                print("Playoutbufer size: {} Frames, {} sec.".format(
+                    self.playout_buffer.qsize(), 
+                    self.playout_buffer.qsize() * (1 / self.target_fps)
+                    ), flush=True)
 
             if self.playout_buffer.qsize() > 0:
                 data = self.playout_buffer.get()
