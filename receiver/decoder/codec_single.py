@@ -100,8 +100,8 @@ class DecompressionPipeline:
 
         # Header
         num_frames = stream.read(np.int32)
-        q_g = stream.read(np.int32)
-        q_a = stream.read(np.int32)
+        q_g = stream.read(np.float64)
+        q_a = stream.read(np.float64)
         q = torch.tensor([[q_g, q_a]], dtype=torch.float, device=self.device)  # Example
 
         # Frames
