@@ -283,8 +283,8 @@ class CompressionPipeline:
 
         num_frames = len(y_strings)
         stream.write(num_frames, np.int32)
-        stream.write(q[0, 0].cpu(), np.int32)
-        stream.write(q[0, 1].cpu(), np.int32)
+        stream.write(q[0, 0].cpu(), np.float64)
+        stream.write(q[0, 1].cpu(), np.float64)
 
         """
         print("-------------")

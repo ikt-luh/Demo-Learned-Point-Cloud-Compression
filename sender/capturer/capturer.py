@@ -174,12 +174,10 @@ class Capturer():
             max_coords = np.max(points, axis=0)
 
             if self.max_points is not None and points.shape[0] > self.max_points:
-                indices = np.argsort(points[:, 2])[::-1]
+                indices = np.argpartition(points[:, 2], -self.max_points)[-self.max_points:] 
                 points = points[indices]
                 colors = colors[indices]
 
-                points = points[:self.max_points]
-                colors = colors[:self.max_points]
 
             data = { "points": points, "colors": colors, "timestamp": t0 }
             return data
