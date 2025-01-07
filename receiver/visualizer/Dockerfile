@@ -35,5 +35,4 @@ COPY . .
 EXPOSE 5173
 
 # Default command to run both the Python script and Vite development server
-#CMD ["sh", "-c", "concurrently --kill-others \"npx vite --host 0.0.0.0 --port 5173\" \"python3 /app/backend.py\""]
 CMD ["sh", "-c", "python3 backend.py & npx vite --host 0.0.0.0 --port 5173"]

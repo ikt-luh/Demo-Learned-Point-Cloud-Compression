@@ -7,6 +7,7 @@ import math
 import zmq
 import yaml
 import numpy as np
+from queue import Queue
 from datetime import datetime
 from mpd_parser import MPDParser
 
@@ -17,6 +18,7 @@ class StreamingClient:
         with open(config_file, 'r') as file:
             config = yaml.safe_load(file)
 
+        # Configuration
         self.mpd_url = config.get("mpd_url")
         self.max_buffer_size = config.get("client_buffer_size")
         self.fixed_quality = config.get("fixed_quality", None)
@@ -27,12 +29,14 @@ class StreamingClient:
         self.decoder_pull_address = config.get("client_pull_address")
         self.visualizer_push_address = config.get("visualizer_push_address")
 
+        # MPD Data
         self.segment_duration = None
         self.last_publish_time = None
         self.mpd_data = None
 
-        self.buffer = []
-        self.downloaded_segments = set()
+        # Buffers
+        self.playout_buffer = Queue(maxsize=self.max_buffer_size)
+        self.downloaded_segments = Queue()
         
         # ZMQ setup
         context = zmq.Context()
@@ -45,18 +49,25 @@ class StreamingClient:
         self.visualizer_socket = context.socket(zmq.PUSH)
         self.visualizer_socket.connect(self.visualizer_push_address)
 
-        # Locks for thread safety
-        self.playout_buffer_lock = threading.Lock()
-        self.playout_buffer = []  # Holds data received from the decoder
 
-    def fetch_and_parse_mpd(self):
-        parser = MPDParser(self.mpd_url)
-        parser.fetch_mpd()
-        self.mpd_data = parser.parse_mpd()
+
+    def initilize_stream(self):
+        """
+        Initialize the stream by trying to get the MPD
+        """
+        self.parser = MPDParser(self.mpd_url)
+
+        print("Initilaizing Client", flush=True)
+
+        success = False
+        while not success: 
+            success = self.parser.fetch_mpd()
+            print("Waiting for Server to become active", flush=True)
+            time.sleep(0.5)
+
+        self.mpd_data = self.parser.parse_mpd()
         self.segment_duration = self.mpd_data['periods'][0]['adaptation_sets'][0]['segment_template']['duration']
         self.last_publish_time = self.mpd_data.get("publishTime")
-        print("Fetching")
-        sys.stdout.flush()
 
     def decide_quality(self):
         """Determine quality level based on bandwidth."""
@@ -89,9 +100,13 @@ class StreamingClient:
         while True:
             timestamp = datetime.now().timestamp() 
 
-            parser = MPDParser(self.mpd_url)
-            parser.fetch_mpd()
-            new_mpd_data = parser.parse_mpd()
+            success = self.parser.fetch_mpd()
+            if not success:
+                print("Unsuccesful fetching")
+                time.sleep(1.0)
+                break
+
+            new_mpd_data = self.parser.parse_mpd()
 
             if new_mpd_data.get("publishTime") != self.last_publish_time:
                 self.mpd_data = new_mpd_data
@@ -99,7 +114,8 @@ class StreamingClient:
 
                 next_segment_number = math.floor((timestamp - self.request_offset) / self.segment_duration)
                 if next_segment_number > self.last_segment_number:
-                    threading.Thread(target=self.segment_downloader, args=(next_segment_number, ), daemon=True).start()
+                    #threading.Thread(target=self.segment_downloader, args=(next_segment_number, ), daemon=True).start()
+                    self.segment_downloader((next_segment_number))
                     self.last_segment_number = next_segment_number
 
             sleep_time = max(0, self.segment_duration - (datetime.now().timestamp() - timestamp))
@@ -114,10 +130,11 @@ class StreamingClient:
         print("Downloaded segment {}".format(next_segment_number, flush=True))
 
         if data:
-            self.downloaded_segments.add(next_segment_number)
+            self.downloaded_segments.put(next_segment_number)
             self.decoder_push_socket.send(data)
         else: 
             print("segment_downloader: Not downloaded...", flush=True)
+
 
     def decoder_receiver(self):
         """Receives processed data from the decoder."""
@@ -130,14 +147,14 @@ class StreamingClient:
         """Sends processed data to the visualizer."""
         while True:
             timestamp = datetime.now().timestamp()
-            print("Playoutbufer size: {} Frames, {} sec.".format(
-                len(self.playout_buffer), 
-                len(self.playout_buffer) * (1 / self.target_fps)
-                ), flush=True)
-            if self.playout_buffer:
-                with self.playout_buffer_lock:
-                    data = self.playout_buffer.pop(0)
 
+            print("Playoutbufer size: {} Frames, {} sec.".format(
+                self.playout_buffer.qsize(), 
+                self.playout_buffer.qsize() * (1 / self.target_fps)
+                ), flush=True)
+
+            if self.playout_buffer.qsize() > 0:
+                data = self.playout_buffer.get()
                 self.visualizer_socket.send(data)
             
             # Sleep to maintain target fps
@@ -160,14 +177,13 @@ class StreamingClient:
             colors_bytes = np.array(colors, dtype=np.uint8).tobytes()
             data = points_bytes + colors_bytes
 
-            with self.playout_buffer_lock:
-                self.playout_buffer.append(data)
+            self.playout_buffer.put(data)
 
         
 
     def start(self):
         """Starts all threads."""
-        self.fetch_and_parse_mpd()
+        self.initilize_stream()
 
         self.last_segment_number = 2
 

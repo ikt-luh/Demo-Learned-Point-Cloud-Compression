@@ -12,20 +12,21 @@ class MPDParser:
 
     def fetch_mpd(self):
         for attempt in range(3):  # Try 3 times
-            response = requests.get(self.mpd_url)
-            if response.status_code == 200:
-                if response.content.strip():
-                    self.mpd_tree = ET.ElementTree(ET.fromstring(response.content))
-                    self.mpd_root = self.mpd_tree.getroot()
-                    break
-                else:
-                    print(f"Attempt {attempt + 1}: Received empty response.")
+            try:
+                response = requests.get(self.mpd_url)
+            except:
+                time.sleep(1.0)
+                continue
+
+            if response.status_code == 200 and response.content.strip():
+                self.mpd_tree = ET.ElementTree(ET.fromstring(response.content))
+                self.mpd_root = self.mpd_tree.getroot()
+                return True
             else:
-                print(f"Attempt {attempt + 1}: Failed to fetch MPD: HTTP {response.status_code}")
-            time.sleep(0.3)  # Wait before retrying
-        else:
-            print("Failed to fetch valid MPD after 3 attempts")
-        sys.stdout.flush()
+                time.sleep(0.3)  # Wait before retrying
+        return False
+
+
 
     def parse_mpd(self):
         if self.mpd_root is None:
