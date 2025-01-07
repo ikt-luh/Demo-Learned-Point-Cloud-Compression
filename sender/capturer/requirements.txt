@@ -1,5 +1,4 @@
 pyzmq
 numpy
-msgpack
 open3d
 pyyaml

@@ -108,6 +108,10 @@ class CompressionPipeline:
 
         points, colors = [], []
         for item in batch:
+            # Sometimes we miss a frame? 
+            if not "points" in item.keys():
+                continue
+
             item_points = item.pop("points")
             item_colors = item.pop("colors")
             sideinfo.append(item)

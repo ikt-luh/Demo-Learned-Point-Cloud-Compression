@@ -20,6 +20,7 @@ class Capturer():
         self.decimate = config.get("decimate", 0)
         self.depth_clip = config.get("depth_clip", -1.5)
         self.voxel_size = config.get("voxel_size", 0.01)
+        self.max_points = config.get("max_points", None)
         self.capturer_push_address = config.get("capturer_push_address")
 
         # Camera setup
@@ -43,10 +44,10 @@ class Capturer():
                 pointcloud = self.get_zed_frames()
 
             # Serialize it
-            serialized_data = self.serialize_pointcloud(pointcloud)
+            if pointcloud is not None:
+                serialized_data = self.serialize_pointcloud(pointcloud)
+                self.socket.send(serialized_data)
 
-            # Send it
-            self.socket.send(serialized_data)
 
     def setup_realsense(self):
         device_list = rs.device_list()
@@ -172,11 +173,20 @@ class Capturer():
             min_coords = np.min(points, axis=0)
             max_coords = np.max(points, axis=0)
 
+            if self.max_points is not None and points.shape[0] > self.max_points:
+                indices = np.argsort(points[:, 2])[::-1]
+                points = points[indices]
+                colors = colors[indices]
+
+                points = points[:self.max_points]
+                colors = colors[:self.max_points]
+
             data = { "points": points, "colors": colors, "timestamp": t0 }
-        return data
+            return data
+        else:
+            return None
 
     def serialize_pointcloud(self, data):
-        #return msgpack.packb(data, use_bin_type=True)
         return pickle.dumps(data)
 
 
