@@ -190,24 +190,6 @@ class CompressionPipeline:
     def hyper_synthesis_step(self, z_hat):
         t0 = time.time()
 
-        """
-        # Transfer z_hat to CPU
-        z_hat_cpu = ME.SparseTensor(
-            coordinates=z_hat.C,
-            features=z_hat.F,
-            device=torch.device("cpu"),
-            tensor_stride=32
-        )
-        self.compression_model.entropy_model.h_s.to('cpu')
-        gaussian_params = self.compression_model.entropy_model.h_s(z_hat_cpu)
-        gaussian_params = ME.SparseTensor(
-            coordinates=gaussian_params.C,
-            features=gaussian_params.F,
-            device=self.device,
-            tensor_stride=8
-        )
-        """
-
         gaussian_params = self.compression_model.entropy_model.h_s(z_hat)
 
         torch.cuda.synchronize()
