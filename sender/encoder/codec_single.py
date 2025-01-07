@@ -4,6 +4,7 @@ import time
 import torch
 import numpy as np
 import MinkowskiEngine as ME
+import pickle
 from bitstream import BitStream
 
 import shared.utils as utils
@@ -15,13 +16,14 @@ torch.use_deterministic_algorithms(True)
 
 
 class CompressionPipeline:
-    def __init__(self):
+    def __init__(self, settings):
         # Define GPU device
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         # Model
         base_path = "./unified/results/"
         self.compression_model = self.load_model(base_path)
+        self.settings = settings
         
     def load_model(self, base_path):
         model_name = "demo_small"
@@ -49,6 +51,9 @@ class CompressionPipeline:
         Supports multiple calls without conflict.
         """
         t_start = time.time()
+        compressed_data = {}
+        compressed_data[0] = pickle.dumps(data)
+
         pointclouds, sideinfo = self.unpack_batch(data)
 
         # Step 1 (Analysis)
@@ -63,40 +68,46 @@ class CompressionPipeline:
         # Step 4 (Hyper Synthesis)
         gaussian_params, t_4 = self.hyper_synthesis_step(z_hat)
 
-        # Step 5 (Gaussian Entropy Model)
-        q = torch.tensor([[1,1]], dtype=torch.float, device=self.device) # TODO: Make a parameter and add support for multiple q's
-        y_strings, y_shapes, t_5 = self.gaussian_model_step(y, y_points, q, gaussian_params)
-
         # Step 6 (Geometry Compression with G-PCC)
         points_streams, t_6 = self.geometry_compression_step(y_points)
 
-        # Step 7 (Bitstream Writing)
-        byte_array, t_7 = self.make_bitstream(y_strings, z_strings, y_shapes, z_shapes, points_streams, k, q)
 
-        compressed_data = byte_array # TODO: Add more qualities
+        t_5s, t_7s = [], []
+        for i, setting in enumerate(self.settings):
+            # Step 5 (Gaussian Entropy Model)
+            q = torch.tensor([setting], dtype=torch.float, device=self.device)
+            y_strings, y_shapes, t_5 = self.gaussian_model_step(y, y_points, q, gaussian_params)
 
+            # Step 7 (Bitstream Writing)
+            byte_array, t_7 = self.make_bitstream(y_strings, z_strings, y_shapes, z_shapes, points_streams, k, q)
+
+            compressed_data[i+1] = byte_array
+            t_5s.append(t_5)
+            t_7s.append(t_7)
 
         # Logging
         num_points = pointclouds.C.shape[0]
         num_frames = len(y_strings)
-        t_sum = t_1 + t_2 + t_3 + t_4 + t_5 + t_6 + t_7
+        t_sum = t_1 + t_2 + t_3 + t_4 + sum(t_5s) + t_6 + sum(t_7s)
+        print("+++++++++++++++++++++++++++++++++++++++++++++++", flush=True)
         print("Step 1 (Analysis): \t\t {:.3f} seconds".format(t_1), flush=True)
         print("Step 2 (Hyper Analysis): \t {:.3f} seconds".format(t_2), flush=True)
         print("Step 3 (Fact. Entr. Model): \t {:.3f} seconds".format(t_3), flush=True)
         print("Step 4 (Hyper Synthesis): \t {:.3f} seconds".format(t_4), flush=True)
-        print("Step 5 (Gaussian Model): \t {:.3f} seconds".format(t_5), flush=True)
-        print("Step 6 (G-PCC): \t\t\t {:.3f} seconds".format(t_6), flush=True)
-        print("Step 7 (Bitstream Writer): \t {:.3f} seconds".format(t_7), flush=True)
+        print("Step 5 (G-PCC): \t\t\t {:.3f} seconds".format(t_6), flush=True)
+        for i, (t_5, t_7) in enumerate(zip(t_5s, t_7s)):
+            print("\tQuality {}".format(i), flush=True)
+            print("\tStep 6 (Gaussian Model): \t {:.3f} seconds".format(t_5), flush=True)
+            print("\tStep 7 (Bitstream Writer): \t {:.3f} seconds".format(t_7), flush=True)
+            print("Bitstream length: \t\t {} bits".format(len(compressed_data[i+1]) * 8), flush=True)
+            print("BPP: \t\t\t\t {:.3f}".format((len(compressed_data[i+1]) * 8) / num_points), flush=True)
         print("-----------------------------------------------", flush=True)
-        print("Encoding Total: \t\t\t {:.3f} seconds".format(t_sum), flush=True)
-        print("Bitstream length: \t\t {} bits".format(len(byte_array * 8)), flush=True)
-        print("BPP: \t\t\t\t {:.3f}".format(len(byte_array * 8) / num_points), flush=True)
         print("Num Points - (Total): {} Per Frame {:.3f}".format(num_points, num_points/num_frames), flush=True)
         print("Num Frames: {} ".format(num_frames), flush=True)
-        print("-----------------------------------------------", flush=True)
+        print("Compression time: {:.3f} sec".format(t_sum))
+        print("+++++++++++++++++++++++++++++++++++++++++++++++", flush=True)
 
         t_end = time.time()
-        print("Compression time: {:.3f} sec".format(t_end - t_start))
         return compressed_data, sideinfo 
 
 
@@ -275,11 +286,13 @@ class CompressionPipeline:
         stream.write(q[0, 0].cpu(), np.int32)
         stream.write(q[0, 1].cpu(), np.int32)
 
+        """
         print("-------------")
         print("Header:")
         print("Num Frames: {}".format(num_frames))
         print("Q: {} {}".format(q[0,0], q[0,1]))
         print("-------------")
+        """
 
         for i in range(num_frames):
             points = points_streams[i]
@@ -302,6 +315,8 @@ class CompressionPipeline:
             stream.write(points, bytes)
             stream.write(y_string[0], bytes)
             stream.write(z_string[0], bytes)
+
+            """
             print("Frame {}:".format(i))
             print("y_shape: \t{}".format(y_shape))
             print("z_shape: \t{}".format(z_shape))
@@ -312,6 +327,7 @@ class CompressionPipeline:
             print("k2: \t{}".format(ks[1][i]))
             print("k3: \t{}".format(ks[2][i]))
             print("-----------")
+            """
 
         bit_string = stream.__str__()
         byte_array = bytes(int(bit_string[i:i+8], 2) for i in range(0, len(bit_string), 8))

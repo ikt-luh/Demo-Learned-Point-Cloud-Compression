@@ -4,22 +4,27 @@ camera: "zed"
 decimate: 0
 depth_clip: -1.0
 voxel_size: 0.004
+max_points: 10000
 capturer_push_address: "tcp://encoder:5555"
 
 # Encoder
 max_queue_size: 100
-target_fps: 4
-gop_size: 4
+target_fps: 5
+gop_size: 5
 segment_duration: 1.0
 encoder_push_address: "tcp://mediaserver:5556"
 encoder_pull_address: "tcp://*:5555"
+encoding_settings:
+  - [0, 0]
+  - [1, 0]
+  - [0, 1]
+  - [1, 1]
 
 # Media Server
 media_server_pull_address: "tcp://*:5556"
 ip_addr: "0.0.0.0"
 port: 8080
 output_directory: "./media"
-
 
 ### RECEIVER ###
 # Client
@@ -32,7 +37,8 @@ client_push_address: "tcp://decoder:5555"
 client_pull_address: "tcp://*:5555"
 visualizer_push_address: "tcp://visualizer:5556"
 
-
 # Decoder
 decoder_push_address: "tcp://client:5555"
 decoder_pull_address: "tcp://*:5555"
+
+# Visualizer

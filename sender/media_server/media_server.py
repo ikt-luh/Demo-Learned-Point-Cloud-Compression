@@ -119,7 +119,8 @@ class StreamingServer:
 
         segment_number = math.floor((timestamp) / self.segment_duration)
 
-        for key, item in data.items():
+        for key in sorted(data):
+            item = data[key]
             segment_folder = os.path.join(self.output_directory, f"ID{key}")
             segment_path = os.path.join(segment_folder, f"segment-{segment_number:015d}.bin")
             tmp_segment_path = os.path.join(segment_folder, f"segment-{segment_number:015d}_tmp.bin")
@@ -134,7 +135,10 @@ class StreamingServer:
             bandwidth = os.path.getsize(segment_path) * 8
 
             if not self.mpd_manager.initialized:
-                self.mpd_manager.add_representation(key, "pointcloud/custom", "unified", bandwidth)
+                if key == 0:
+                    self.mpd_manager.add_representation(key, "pointcloud/custom", "raw", bandwidth)
+                else:
+                    self.mpd_manager.add_representation(key, "pointcloud/custom", "unified", bandwidth)
 
             self.mpd_manager.update_segment(key, "1", segment_path, bandwidth)
 

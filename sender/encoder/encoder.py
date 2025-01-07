@@ -26,6 +26,7 @@ class Encoder:
         self.segment_duration = config.get("segment_duration", 1.0)
         self.push_address = config.get("encoder_push_address", "tcp://mediaserver:5556")
         self.pull_address = config.get("encoder_pull_address", "tcp://*:5555")
+        self.encoding_settings = config.get("encoding_settings")
         
         # ZeroMQ
         context = zmq.Context()
@@ -44,7 +45,7 @@ class Encoder:
         self.worker_thread.daemon = True
         self.worker_thread.start()
 
-        self.codec = CompressionPipeline()
+        self.codec = CompressionPipeline(self.encoding_settings)
 
     def run(self):
         batch = []
@@ -127,12 +128,9 @@ class Encoder:
         data["segment_duration"] = self.segment_duration
         data["frame_rate"] = self.target_fps
 
-        compressed_data = self.codec.compress(sampled_batch)
+        compressed_data, sideinfo = self.codec.compress(sampled_batch)
 
-        # TODO: Hanlde uncompressed input and multiple qualities
-        data[str(0)] = compressed_data
-
-        return data  # Replace with actual compression logic
+        return compressed_data  # Replace with actual compression logic
 
         
 
