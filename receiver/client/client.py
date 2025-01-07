@@ -11,7 +11,7 @@ from queue import Queue
 from datetime import datetime
 from mpd_parser import MPDParser
 
-LOG = False
+LOG = True
 
 shared_epoch = datetime(2024, 1, 1, 0, 0, 0).timestamp()
 
@@ -35,6 +35,7 @@ class StreamingClient:
         self.segment_duration = None
         self.last_publish_time = None
         self.mpd_data = None
+        self.server_active = False
 
         # Buffers
         self.playout_buffer = Queue(maxsize=self.max_buffer_size)
@@ -50,6 +51,7 @@ class StreamingClient:
 
         self.visualizer_socket = context.socket(zmq.PUSH)
         self.visualizer_socket.connect(self.visualizer_push_address)
+
 
 
     def initilize_stream(self):
@@ -69,6 +71,7 @@ class StreamingClient:
         self.mpd_data = self.parser.parse_mpd()
         self.segment_duration = self.mpd_data['periods'][0]['adaptation_sets'][0]['segment_template']['duration']
         self.last_publish_time = self.mpd_data.get("publishTime")
+        self.server_active = True
 
     def decide_quality(self):
         """Determine quality level based on bandwidth."""
@@ -115,13 +118,14 @@ class StreamingClient:
 
                 next_segment_number = math.floor((timestamp - self.request_offset) / self.segment_duration)
                 if next_segment_number > self.last_segment_number:
-                    #threading.Thread(target=self.segment_downloader, args=(next_segment_number, ), daemon=True).start()
-                    self.segment_downloader((next_segment_number))
+                    self.segment_downloader(next_segment_number)
                     self.last_segment_number = next_segment_number
 
             sleep_time = max(0, self.segment_duration - (datetime.now().timestamp() - timestamp))
             time.sleep(sleep_time)
-            print(f"Sleeping for {sleep_time:.2f} seconds", flush=True)
+            
+            if LOG:
+                print(f"Sleeping for {sleep_time:.2f} seconds", flush=True)
 
     def segment_downloader(self, next_segment_number):
         """Downloads and sends segments to the decoder."""
