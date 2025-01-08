@@ -11,6 +11,7 @@ from queue import Queue
 from datetime import datetime
 
 from mpd_parser import MPDParser
+from downloader import SegmentDownloader
 from controls import create_flask_app
 
 LOG = True
@@ -54,6 +55,8 @@ class StreamingClient:
         self.visualizer_socket = context.socket(zmq.PUSH)
         self.visualizer_socket.connect(self.visualizer_push_address)
 
+        # Logic
+        self.segment_downloader = SegmentDownloader()
  
     def initilize_stream(self):
         """
@@ -84,6 +87,7 @@ class StreamingClient:
             return 1
         return 2
 
+    """
     def download_segment(self, quality, segment_number):
         base_url = self.mpd_url.rsplit('/', 1)[0]
         media_template = self.mpd_data['periods'][0]['adaptation_sets'][0]['segment_template']['media']
@@ -99,6 +103,7 @@ class StreamingClient:
             except Exception as e:
                 print(f"Failed to download segment {segment_number}, attempt {attempt + 1}: {e}")
         return None
+    """
 
     def mpd_updater(self):
         """Periodically checks and updates MPD."""
@@ -119,7 +124,7 @@ class StreamingClient:
 
                 next_segment_number = math.floor((timestamp - self.request_offset) / self.segment_duration)
                 if next_segment_number > self.last_segment_number:
-                    self.segment_downloader(next_segment_number)
+                    self.segment_downloader_func(next_segment_number)
                     self.last_segment_number = next_segment_number
 
             sleep_time = max(0, self.segment_duration - (datetime.now().timestamp() - timestamp))
@@ -128,11 +133,17 @@ class StreamingClient:
             if LOG:
                 print(f"Sleeping for {sleep_time:.2f} seconds", flush=True)
 
-    def segment_downloader(self, next_segment_number):
+    def segment_downloader_func(self, next_segment_number):
         """Downloads and sends segments to the decoder."""
         # This will require the qualities available and the current estimated bandwidth
         quality = self.decide_quality()
-        data = self.download_segment(quality, next_segment_number)
+        base_url = self.mpd_url.rsplit('/', 1)[0]
+        media_template = self.mpd_data['periods'][0]['adaptation_sets'][0]['segment_template']['media']
+
+        data = self.segment_downloader.download_segment(base_url, media_template, quality, next_segment_number)
+
+        #data = self.download_segment(quality, next_segment_number)
+
         codec_info = self.mpd_data['periods'][0]["adaptation_sets"][0]["representations"][quality]["codecs"]
         if LOG:
             print("Downloaded segment {}".format(next_segment_number, flush=True))
@@ -208,7 +219,6 @@ class StreamingClient:
         while True:
             time.sleep(1)
 
-# Example usage
 if __name__ == "__main__":
     client = StreamingClient("./shared/config.yaml")
     client.start()
