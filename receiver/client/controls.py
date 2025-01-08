@@ -9,7 +9,7 @@ def create_flask_app(client):
         if request.method == "POST":
             new_quality = request.form.get("fixed_quality")
             if new_quality.isdigit():
-                client.fixed_quality = int(new_quality)
+                client.segment_downloader.current_quality = int(new_quality)
         return f"""
         <html>
             <body>
