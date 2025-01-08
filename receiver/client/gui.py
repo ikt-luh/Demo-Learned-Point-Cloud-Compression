@@ -16,7 +16,7 @@ def create_flask_app(client):
                 <h1>Streaming Client Configuration</h1>
                 <form method="POST">
                     <label for="fixed_quality">Fixed Quality (0, 1, 2, 3, 4):</label>
-                    <input type="number" id="fixed_quality" name="fixed_quality" value="{client.fixed_quality or ''}" min="0" max="4">
+                    <input type="number" id="fixed_quality" name="fixed_quality" value="{client.segment_downloader.current_quality or ''}" min="0" max="4">
                     <button type="submit">Update</button>
                 </form>
             </body>

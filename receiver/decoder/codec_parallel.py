@@ -5,11 +5,12 @@ import torch
 import numpy as np
 import MinkowskiEngine as ME
 from bitstream import BitStream
+from queue import Queue
 
 import shared.utils as utils
 from unified.model import model
 
-LOG = True
+LOG = False
 
 torch.set_grad_enabled(False)
 
@@ -21,6 +22,15 @@ class DecompressionPipeline:
         # Model
         base_path = "./unified/results/"
         self.decompression_model = self.load_model(base_path)
+        
+        # Queue's
+        self.bitstream_queue = Queue()
+        self.geometry_decomp_queue = Queue()
+        self.factorized_model_queue = Queue()
+        self.hypter_synthesis_queue = Queue()
+        self.gaussian_model_queue = Queue()
+        self.synthesis_queue = Queue()
+
         print("Pipleine Initialized", flush=True)
 
     def load_model(self, base_path):

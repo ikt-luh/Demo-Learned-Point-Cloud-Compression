@@ -69,7 +69,6 @@ class Decoder:
                     # Send decompressed data back via the socket
                     self.push_socket.send(pickle.dumps(decompressed_batch))
                 else:
-                    print(pickle.loads(data))
                     self.push_socket.send(data)
             else:
                 time.sleep(0.05)

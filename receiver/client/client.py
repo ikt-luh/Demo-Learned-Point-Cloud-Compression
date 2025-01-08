@@ -12,7 +12,7 @@ from datetime import datetime
 
 from mpd_parser import MPDParser
 from downloader import SegmentDownloader
-from controls import create_flask_app
+from gui import create_flask_app
 
 LOG = True
 
@@ -59,40 +59,20 @@ class StreamingClient:
         self.segment_downloader = SegmentDownloader(fixed_quality_mode, init_quality)
         self.mpd_parser = MPDParser(self.mpd_url)
  
-    """
-    def initilize_stream(self):
-        print("Initilaizing Client", flush=True)
-
-        success = False
-        while not success: 
-            success = self.parser.update_mpd()
-            print("Waiting for Server to become active", flush=True)
-            time.sleep(0.5)
-
-        self.mpd_data = self.parser.parse_mpd()
-        self.segment_duration = self.mpd_data['periods'][0]['adaptation_sets'][0]['segment_template']['duration']
-        self.last_publish_time = self.mpd_data.get("publishTime")
-        self.server_active = True
-    """
-
 
     def download_loop(self):
         """Periodically checks and updates MPD."""
         while True:
             timestamp = datetime.now().timestamp() 
 
-            # Wait for succesfull update of the MPD Parser 
             while not self.mpd_parser.update_mpd():
                 print("Waiting for MPD to become available", flush=True)
 
-            #new_mpd_data = self.parser.parse_mpd()
             segment_duration = self.mpd_parser.get_segment_duration()
             publish_time = self.mpd_parser.get_publish_time()
 
-
             if publish_time != self.last_publish_time:
                 self.last_publish_time = publish_time
-
                 next_segment_number = math.floor((timestamp - self.request_offset) / segment_duration)
 
                 if next_segment_number > self.last_segment_number:
@@ -105,17 +85,14 @@ class StreamingClient:
 
     def download_segment(self, next_segment_number):
         """Downloads and sends segments to the decoder."""
-        # This will require the qualities available and the current estimated bandwidth
         base_url = self.mpd_url.rsplit('/', 1)[0]
         media_template = self.mpd_parser.get_media_template()
 
         data = self.segment_downloader.download_segment(base_url, media_template, next_segment_number)
         codec_info = self.mpd_parser.get_codec_info(self.segment_downloader.current_quality)
 
-        if LOG:
-            print("Downloaded segment {}".format(next_segment_number, flush=True))
-
         if data:
+            print("Downloaded segment {}".format(next_segment_number), flush=True)
             self.downloaded_segments.put(next_segment_number)
             self.decoder_push_socket.send(pickle.dumps([codec_info, data]))
         else: 
@@ -126,53 +103,46 @@ class StreamingClient:
         """Receives processed data from the decoder."""
         while True:
             decoded_data = self.decoder_pull_socket.recv()
-            self.prepare_for_rendering(decoded_data)
+            data = pickle.loads(decoded_data)
+
+            for frame in data:
+                points = frame["points"] + 100
+                colors = 255 * frame["colors"]
+                #timestamp = frame["timestamp"]
+
+                # Pack to bytes
+                points_bytes = np.array(points, dtype=np.float32).tobytes()
+                colors_bytes = np.array(colors, dtype=np.uint8).tobytes()
+                data = points_bytes + colors_bytes
+
+                self.playout_buffer.put(data)
 
 
     def visualizer_sender(self):
         """Sends processed data to the visualizer."""
         while True:
             timestamp = datetime.now().timestamp()
-
+            """
             if LOG:
-                print("Playoutbufer size: {} Frames, {} sec.".format(
-                    self.playout_buffer.qsize(), 
-                    self.playout_buffer.qsize() * (1 / self.target_fps)
-                    ), flush=True)
+                print("Playoutbufer size: {} Frames, {} sec.".format(self.playout_buffer.qsize(), self.playout_buffer.qsize() * (1 / self.target_fps)), flush=True)
+            """
+            while self.playout_buffer.empty():
+                print("Stalling", flush=True)
+                time.sleep(0.1)
+                timestamp = datetime.now().timestamp()
 
-            if self.playout_buffer.qsize() > 0:
-                data = self.playout_buffer.get()
-                self.visualizer_socket.send(data)
+            data = self.playout_buffer.get()
+            self.visualizer_socket.send(data)
             
-            # Sleep to maintain target fps
             sleep_time = max(0, (1/self.target_fps) - (datetime.now().timestamp() - timestamp))
             time.sleep(sleep_time)
 
-    def prepare_for_rendering(self, data):
-        """
-        Unpacks the decoded segment and prepares it for rendering
-        """
-        data = pickle.loads(data)
-        packed_frames = []
-        for frame in data:
-            points = frame["points"] + 100
-            colors = 255 * frame["colors"]
-            #timestamp = frame["timestamp"]
-
-            # Pack to bytes
-            points_bytes = np.array(points, dtype=np.float32).tobytes()
-            colors_bytes = np.array(colors, dtype=np.uint8).tobytes()
-            data = points_bytes + colors_bytes
-
-            self.playout_buffer.put(data)
-
         
-
     def start(self):
         """Starts all threads."""
         #self.initilize_stream()
 
-        self.last_segment_number = 2
+        self.last_segment_number = 0
 
         # Start threads
         threading.Thread(target=self.download_loop, daemon=True).start()
