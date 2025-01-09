@@ -8,6 +8,7 @@ import zmq
 import pickle
 import numpy as np
 import torch
+import concurrent.futures
 
 from codec_single import DecompressionPipeline as DecoderSingle
 from codec_parallel import DecompressionPipeline as DecoderParallel
@@ -41,58 +42,39 @@ class Decoder:
             self.codec = DecoderSingle()
         else:
             self.codec = DecoderParallel()
+        
+         # Thread pool for parallel decoding
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)  # Adjust workers as needed
 
 
-    def fill_queue(self):
-        while True:
-            data = self.pull_socket.recv()
-            data = pickle.loads(data)
-            print("{} Received data".format(time.time()), flush=True)
-
-            # Cleanup if queue exceeds threshold
-            while self.queue.qsize() > self.queue_cleanup_threshold:
-                print("Queue exceeded cleanup threshold. Dropping excess data.", flush=True)
-                _ = self.queue.get()
-
-            # Enqueue data
-            self.queue.put(data)
-
-    def decode(self):
+    def decode_and_send(self, data):
         """
-        Thread to decode data and push it back directly.
+        Decode the received data and send it back.
         """
-        while True:
-            if self.queue.qsize() > 0:
-                data = self.queue.get(timeout=1)  # Retrieve data from queue
-                codec_info, data = data #pickle.loads(data)
-                data = pickle.loads(data)
+        codec_info, data = data
+        data = pickle.loads(data)
 
-                if codec_info == "unified":
-                    data_bitstream = data
-                    print("{} Sending to decoder".format(time.time()), flush=True)
-                    decompressed_batch = self.codec.decompress(data_bitstream)
+        if codec_info == "unified":
+            print(f"{time.time()} Sending to decoder", flush=True)
+            data_bitstream = data
+            decompressed_batch = self.codec.decompress(data_bitstream)
 
-                    # Send decompressed data back via the socket
-                    self.push_socket.send(pickle.dumps(decompressed_batch))
-                else:
-                    self.push_socket.send(data)
-            else:
-                time.sleep(0.05)
-
-
+            # Send decompressed data back via the socket
+            self.push_socket.send(pickle.dumps(decompressed_batch))
+        else:
+            self.push_socket.send(data)
 
     def run(self):
         """
-        Start all threads.
+        Continuously receive, decode, and send data.
         """
-        fill_thread = threading.Thread(target=self.fill_queue, daemon=True)
-        decode_push_thread = threading.Thread(target=self.decode, daemon=True)
-
-        fill_thread.start()
-        decode_push_thread.start()
-
         while True:
-            time.sleep(1)
+            # Receive data
+            raw_data = self.pull_socket.recv()
+            data = pickle.loads(raw_data)
+
+            # Submit decoding task to the thread pool
+            self.executor.submit(self.decode_and_send, data)
 
     
 
