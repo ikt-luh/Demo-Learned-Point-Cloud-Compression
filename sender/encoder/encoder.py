@@ -60,7 +60,6 @@ class Encoder:
             # Receive and deserialize incoming data
             data = pickle.loads(self.pull_socket.recv())
             time_stamp = data["timestamp"]
-            print(time_stamp, flush=True)
 
             # Initialize the start time stamp for the first batch
             if start_time_stamp is None:
