@@ -9,7 +9,8 @@ import pickle
 import numpy as np
 import torch
 
-from codec_single import DecompressionPipeline
+from codec_single import DecompressionPipeline as DecoderSingle
+from codec_parallel import DecompressionPipeline as DecoderParallel
 
 os.environ["CUBLAS_WORKSPACE_CONFIG"]=":4096:8"
 torch.manual_seed(0)
@@ -24,6 +25,7 @@ class Decoder:
         self.max_queue_size = config.get("max_queue_size")
         self.decoder_push_address = config.get("decoder_push_address")
         self.decoder_pull_address = config.get("decoder_pull_address")
+        self.decoder_type = config.get("decoder_type")
 
         # ZeroMQ
         context = zmq.Context()
@@ -35,7 +37,11 @@ class Decoder:
         # Bounded queue for frame buffering
         self.queue = queue.Queue(maxsize=self.max_queue_size)
 
-        self.codec = DecompressionPipeline()
+        if self.decoder_type == "Single":
+            self.codec = DecoderSingle()
+        else:
+            self.codec = DecoderParallel()
+
 
     def fill_queue(self):
         while True:

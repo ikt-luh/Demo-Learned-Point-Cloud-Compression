@@ -5,12 +5,13 @@ import torch
 import numpy as np
 import MinkowskiEngine as ME
 from bitstream import BitStream
-from queue import Queue
+import threading
 
 import shared.utils as utils
+from shared.notifying_queue import NotifyingQueue
 from unified.model import model
 
-LOG = False
+LOG = True
 
 torch.set_grad_enabled(False)
 
@@ -24,14 +25,24 @@ class DecompressionPipeline:
         self.decompression_model = self.load_model(base_path)
         
         # Queue's
-        self.bitstream_queue = Queue()
-        self.geometry_decomp_queue = Queue()
-        self.factorized_model_queue = Queue()
-        self.hypter_synthesis_queue = Queue()
-        self.gaussian_model_queue = Queue()
-        self.synthesis_queue = Queue()
+        self.geometry_hyper_queue = NotifyingQueue()
+        self.hyper_synthesis_queue = NotifyingQueue()
+        self.gaussian_queue = NotifyingQueue()
+        self.synthesis_queue = NotifyingQueue()
+        self.results_queue = NotifyingQueue()
 
-        print("Pipleine Initialized", flush=True)
+        # Start threads
+        self.threads = []
+        self.threads.append(threading.Thread(target=self.run_geometry_hyper, daemon=True))
+        self.threads.append(threading.Thread(target=self.run_hyper_synthesis, daemon=True))
+        self.threads.append(threading.Thread(target=self.run_gaussian_bottleneck, daemon=True))
+        self.threads.append(threading.Thread(target=self.run_synthesis, daemon=True))
+
+        for thread in self.threads:
+            thread.start()
+
+        print("Pipeline Initialized (Parallel)", flush=True)
+
 
     def load_model(self, base_path):
         #model_name = "model_inverse_nn"
@@ -51,13 +62,9 @@ class DecompressionPipeline:
 
         return decompression_model
 
-    def decompress(self, compressed_data):
-        """
-        Main decompression pipeline method.
-        Runs all steps from bitstream reading to reconstruction.
-        """
-        with torch.no_grad():
-            t_start = time.time()
+    def run_geometry_hyper(self):
+        while True:
+            compressed_data = self.geometry_hyper_queue.get()
 
             # Step 1 (Bitstream Reading)
             y_strings, z_strings, y_shapes, z_shapes, points_streams, ks, q, t_1 = self.read_bitstream(compressed_data)
@@ -68,19 +75,91 @@ class DecompressionPipeline:
             # Step 3 (Factorized Entropy Model)
             z_hats, t_3 = self.factorized_model_step(z_strings, z_shapes, y_points)
 
+            result = {
+                "y_strings" : y_strings,
+                "z_strings" : z_strings,
+                "y_shapes" : y_shapes,
+                "z_shapes" : z_shapes,
+                "points_streams" : points_streams,
+                "ks" : ks,
+                "q" : q,
+                "y_points" : y_points,
+                "z_hats" : z_hats,
+                "t_1" : t_1, 
+                "t_2" : t_2, 
+                "t_3" : t_3, 
+            }
+            self.hyper_synthesis_queue.put(result)
+
+    def run_hyper_synthesis(self):
+        while True:
+            result = self.hyper_synthesis_queue.get()
+            z_hats = result["z_hats"]
+
             # Step 4 (Hyper Synthesis)
-            gaussian_params, t_4 = self.hyper_synthesis_step(z_hats)
+            with torch.no_grad():
+                gaussian_params, t_4 = self.hyper_synthesis_step(z_hats)
+
+            result["gaussian_params"] = gaussian_params
+            result["t_4"] = t_4
+            self.gaussian_queue.put(result)
+
+
+    def run_gaussian_bottleneck(self):
+        while True:
+            result = self.gaussian_queue.get()
+            y_strings = result["y_strings"]
+            y_shapes = result["y_shapes"]
+            y_points = result["y_points"]
+            q = result["q"]
+            gaussian_params = result["gaussian_params"]
 
             # Step 5 (Gaussian Entropy Model)
             y_hat, t_5 = self.gaussian_model_step(y_strings, y_shapes, y_points, q, gaussian_params)
 
-            # Step 6 (Hyper Synthesis)
-            reconstructed_pointcloud, t_6 = self.hyper_synthesis(y_hat, ks)
+            result["y_hat"] = y_hat
+            result["t_5"] = t_5
 
-            # Postprocessing: Pack data back into batches
-            final_data, t_7 = self.pack_batches(reconstructed_pointcloud)
+            self.synthesis_queue.put(result)
+
+    def run_synthesis(self):
+        while True:
+            result = self.synthesis_queue.get()
+            y_hat = result["y_hat"]
+            ks = result["ks"]
+
+            # Step 6 (Hyper Synthesis)
+            with torch.no_grad():
+                reconstructed_pointcloud, t_6 = self.hyper_synthesis(y_hat, ks)
+
+            result["reconstructed_pointcloud"] = reconstructed_pointcloud
+            result["t_6"] = t_6
+
+            self.results_queue.put(result)
+
+    def decompress(self, compressed_data):
+        """
+        Main decompression pipeline method.
+        Runs all steps from bitstream reading to reconstruction.
+        """
+        t_start = time.time()
+
+        self.geometry_hyper_queue.put(compressed_data)
+
+        result = self.results_queue.get()
+
+        reconstructed_pointcloud = result["reconstructed_pointcloud"]
+
+        # Postprocessing: Pack data back into batches
+        final_data, t_7 = self.pack_batches(reconstructed_pointcloud)
 
         # Logging
+        t_1 = result["t_1"]
+        t_2 = result["t_2"]
+        t_3 = result["t_3"]
+        t_4 = result["t_4"]
+        t_5 = result["t_5"]
+        t_6 = result["t_6"]
         t_sum = t_1 + t_2 + t_3 + t_4 + t_5 + t_6 + t_7
         if LOG:
             print("Step 1 (Bitstream Reading): \t {:.3f} seconds".format(t_1), flush=True)
@@ -94,8 +173,10 @@ class DecompressionPipeline:
             print("Decoding Total: \t\t {:.3f} seconds".format(t_sum), flush=True)
 
         t_end = time.time()
-        print("Decompression time: {:.3f} sec".format(t_end - t_start))
+        print("Decompression time: {:.3f} sec".format(t_end - t_start), flush=True)
+        print("Done at {}".format(t_end), flush=True)
         return final_data
+
 
     def read_bitstream(self, compressed_data):
         """ Step 1: Read the bitstream. """
