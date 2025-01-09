@@ -112,15 +112,15 @@ class Capturer():
     def setup_zed(self):
         """
         """
-        init = sl.InitParameters(depth_mode=sl.DEPTH_MODE.PERFORMANCE,
+        init = sl.InitParameters(depth_mode=sl.DEPTH_MODE.ULTRA, # ULTRA, QUALITY, PERFORMANCE
                 coordinate_units=sl.UNIT.METER,
                 coordinate_system=sl.COORDINATE_SYSTEM.RIGHT_HANDED_Y_UP)
         init.camera_resolution = sl.RESOLUTION.HD1080
+        init.camera_fps = 15
 
         self.res = sl.Resolution()
-        print(self.res.width, flush=True)
-        self.res.width = 1280
-        self.res.height = 720
+        #self.res.width = 1280
+        #self.res.height = 720
 
         self.zed = sl.Camera()
         status = self.zed.open(init)
@@ -165,6 +165,7 @@ class Capturer():
             colors = np.asarray(downsampled_pointcloud.colors)
             points = np.round(points / (self.voxel_size)).astype(np.int16)
 
+            """
             # Remove duplicates
             _, unique_indices = np.unique(points, axis=0, return_index=True)
             points = points[unique_indices]
@@ -177,7 +178,7 @@ class Capturer():
                 indices = np.argpartition(points[:, 2], -self.max_points)[-self.max_points:] 
                 points = points[indices]
                 colors = colors[indices]
-
+            """
 
             data = { "points": points, "colors": colors, "timestamp": t0 }
             return data

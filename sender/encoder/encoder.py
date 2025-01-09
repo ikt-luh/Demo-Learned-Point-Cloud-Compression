@@ -9,6 +9,7 @@ import numpy as np
 import torch
 
 from codec_single import CompressionPipeline
+#from codec_pipeline import CompressionPipeline
 
 class Encoder:
     def __init__(self, config_file=None): #max_queue_size=60, target_fps=3, gop_size=3, segment_duration=1.0):
