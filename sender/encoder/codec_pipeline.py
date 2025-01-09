@@ -153,22 +153,28 @@ class CompressionPipeline:
 
             # Merge the dicts
             result = {**result_y, **result_points, **result_priors}
+            y = result["y"]
+            y_points = result["y_points"]
+            gaussian_params = result["gaussian_params"]
+            z_strings = result["z_strings"]
+            z_shapes = result["z_shapes"]
+            points_streams = result["points_streams"]
+            k = result["k"]
 
-
-            # Submit tasks to the thread pool
-            futures = []
-            for i, setting in enumerate(self.settings):
-                futures.append(self.thread_pool.submit(self.process_setting, result, i, setting))
-
-            # Collect results
             compressed_data = {}
             t_5s, t_7s = [], []
-            for future in concurrent.futures.as_completed(futures):
-                print("Collecting")
-                i, byte_array, t_5, t_7 = future.result()
+            for i, setting in enumerate(self.settings):
+                # Step 5 (Gaussian Entropy Model)
+                q = torch.tensor([setting], dtype=torch.float, device=self.device)
+                y_strings, y_shapes, t_5 = self.gaussian_model_step(y, y_points, q, gaussian_params)
+
+                # Step 7 (Bitstream Writing)
+                byte_array, t_7 = self.make_bitstream(y_strings, z_strings, y_shapes, z_shapes, points_streams, k, q)
+
                 compressed_data[i] = byte_array
                 t_5s.append(t_5)
                 t_7s.append(t_7)
+
 
             result["compressed_data"] = compressed_data
             result["t_5s"] = t_5s
@@ -176,23 +182,6 @@ class CompressionPipeline:
             self.results_queue.put(result)
             # Define the task for parallel execution
 
-    def process_setting(self, result, i, setting):
-        y = result["y"]
-        y_points = result["y_points"]
-        gaussian_params = result["gaussian_params"]
-        z_strings = result["z_strings"]
-        z_shapes = result["z_shapes"]
-        points_streams = result["points_streams"]
-        k = result["k"]
-        q = torch.tensor([setting], dtype=torch.float, device=self.device)
-
-        # Step 5 (Gaussian Entropy Model)
-        y_strings, y_shapes, t_5 = self.gaussian_model_step(y, y_points, q, gaussian_params)
-
-        # Step 7 (Bitstream Writing)
-        byte_array, t_7 = self.make_bitstream(y_strings, z_strings, y_shapes, z_shapes, points_streams, k, q)
-
-        return i, byte_array, t_5, t_7
 
     def compress(self, data):
         """
@@ -209,7 +198,6 @@ class CompressionPipeline:
 
         self.analysis_queue.put(pointclouds)
         
-
         result = self.results_queue.get()
         t_1 = result["t_1"]
         t_2 = result["t_2"]
@@ -353,59 +341,27 @@ class CompressionPipeline:
     def gaussian_model_step(self, y, y_points, q, gaussian_params):
         t0 = time.time()
         
-        """
-        y = ME.SparseTensor(
-            coordinates=y.C,
-            features=y.F,
-            tensor_stride=8,
-            device=torch.device("cpu")
-        )
-        gaussian_params = ME.SparseTensor(
-            coordinates=gaussian_params.C,
-            features=gaussian_params.F,
-            tensor_stride=8,
-            device=torch.device("cpu")
-        )
-        q = q.cpu()
-        """
-
-        t_start = time.time()
         gaussian_params_feats = gaussian_params.features_at_coordinates(y.C.float())
 
         gaussian_params = utils.get_features_per_batch(gaussian_params_feats, y.C)
         y_feats = utils.get_features_per_batch(y)
-        t_end = time.time()
-        print("Processing {}".format(t_end - t_start))
 
-        # Scale NN
-        t_start = time.time()
-        scale = self.compression_model.entropy_model.scale_nn(q) + self.compression_model.entropy_model.eps
-        scale = scale[:].t().unsqueeze(0)#.cpu()
-        t_end = time.time()
-
-        print("NN {}".format(t_end - t_start))
         y_strings, shapes = [], []
         for y_feat, gaussian_param in zip(y_feats, gaussian_params):
             scales_hat, means_hat = gaussian_param.chunk(2, dim=1)
             scales_hat = scales_hat.t().unsqueeze(0)
             means_hat = means_hat.t().unsqueeze(0)
 
-            t_start = time.time()
-            # Alternative Approach to building indexes
-            scales_hat = self.compression_model.entropy_model.gaussian_conditional.lower_bound_scale(scales_hat * scale)
-            scale_table_tensor = torch.tensor(self.compression_model.entropy_model.gaussian_conditional.scale_table[:-1], device=scales_hat.device)
-            indexes = torch.sum(scales_hat.unsqueeze(-1) > scale_table_tensor, dim=-1).int()
+            # Scale NN
+            scale = self.compression_model.entropy_model.scale_nn(q) + self.compression_model.entropy_model.eps
+            scale = scale[:].t().unsqueeze(0)
 
-            #indexes = self.compression_model.entropy_model.gaussian_conditional.build_indexes(scales_hat * scale)
-            print("Indexes: {}".format(time.time() - t_start))
-            t_start = time.time()
+            indexes = self.compression_model.entropy_model.gaussian_conditional.build_indexes(scales_hat * scale)
             y_string = self.compression_model.entropy_model.gaussian_conditional.compress(
                 y_feat.t().unsqueeze(0) * scale,
                 indexes,
                 means=means_hat * scale
             )
-            t_end = time.time()
-            print("Compresds: {}".format(t_end - t_start))
 
             y_strings.append(y_string)
             shapes.append(y_feat.shape[0])
@@ -413,7 +369,7 @@ class CompressionPipeline:
         t1 = time.time()
         t_step = t1 - t0
 
-        return y_strings, shapes, t_step
+        return y_strings, shapes,t_step
 
 
     def geometry_compression_step(self, y_points):

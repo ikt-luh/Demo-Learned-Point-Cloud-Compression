@@ -7,12 +7,13 @@ import zmq
 import pickle
 import numpy as np
 import torch
+import concurrent.futures
 
-from codec_single import CompressionPipeline
-#from codec_pipeline import CompressionPipeline
+#from codec_single import CompressionPipeline
+from codec_pipeline import CompressionPipeline
 
 class Encoder:
-    def __init__(self, config_file=None): #max_queue_size=60, target_fps=3, gop_size=3, segment_duration=1.0):
+    def __init__(self, config_file=None): 
         # Load settings from YAML if a file is provided
         if config_file:
             with open(config_file, 'r') as file:
@@ -38,6 +39,7 @@ class Encoder:
         self.pull_socket = context.socket(zmq.PULL)
         self.pull_socket.bind(self.pull_address)
 
+        """
         # Thread-safe queue for batches
         self.batch_queue = queue.Queue()
 
@@ -45,6 +47,8 @@ class Encoder:
         self.worker_thread = threading.Thread(target=self.worker)
         self.worker_thread.daemon = True
         self.worker_thread.start()
+        """
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 
         self.codec = CompressionPipeline(self.encoding_settings)
 
@@ -56,6 +60,7 @@ class Encoder:
             # Receive and deserialize incoming data
             data = pickle.loads(self.pull_socket.recv())
             time_stamp = data["timestamp"]
+            print(time_stamp, flush=True)
 
             # Initialize the start time stamp for the first batch
             if start_time_stamp is None:
@@ -69,12 +74,14 @@ class Encoder:
                 batch.append(data)
             else:
                 # Push the batch to the processing queue
-                self.batch_queue.put(batch)
+                self.executor.submit(self.process, batch)
+                #self.batch_queue.put(batch)
 
                 # Reset batch and adjust start time
                 start_time_stamp += self.segment_duration  # Ensure fixed intervals
                 batch = [data]
 
+    """
     def worker(self):
         while True:
             # Wait for a batch to process
@@ -82,6 +89,7 @@ class Encoder:
             if batch is None:
                 break  # Exit worker thread if None is received
             self.process(batch)
+    """
 
     def process(self, batch):
         # Sampling
@@ -131,7 +139,7 @@ class Encoder:
 
         compressed_data, sideinfo = self.codec.compress(sampled_batch)
 
-        return compressed_data  # Replace with actual compression logic
+        return compressed_data  
 
         
 

@@ -116,7 +116,7 @@ class Capturer():
                 coordinate_units=sl.UNIT.METER,
                 coordinate_system=sl.COORDINATE_SYSTEM.RIGHT_HANDED_Y_UP)
         init.camera_resolution = sl.RESOLUTION.HD1080
-        init.camera_fps = 15
+        init.camera_fps = 30
 
         self.res = sl.Resolution()
         #self.res.width = 1280
