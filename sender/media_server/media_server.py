@@ -92,7 +92,9 @@ class StreamingServer:
             self.handle_data(segment, current_segment_id)
             self.cleanup_queue.append(current_segment_id)
 
-            sleep_time = max(0, self.segment_duration - (time.time() - timestamp))
+            #sleep_time = max(0, self.segment_duration - (time.time() - timestamp))
+            next_wake_time = (current_segment_id + 1) * self.segment_duration
+            sleep_time = max(0, next_wake_time - time.time())
             time.sleep(sleep_time)
 
 
@@ -160,7 +162,7 @@ class StreamingServer:
 
     def process_logs_and_save(self, data):
         if self.csv_file is None:
-            self.csv_file = "./results/logs/sender/{:015d}.csv".format(math.floor(time.time()))
+            self.csv_file = "./evaluation/logs/sender/{:015d}.csv".format(math.floor(time.time()))
 
         # Helper function to flatten a nested dictionary
         def flatten_dict(d, parent_key=''):
