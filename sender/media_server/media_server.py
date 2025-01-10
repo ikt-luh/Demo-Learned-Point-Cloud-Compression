@@ -160,7 +160,7 @@ class StreamingServer:
 
     def process_logs_and_save(self, data):
         if self.csv_file is None:
-            self.csv_file = "./results/sender/run-{:015d}.csv".format(math.floor(time.time()))
+            self.csv_file = "./results/logs/sender/{:015d}.csv".format(math.floor(time.time()))
 
         # Helper function to flatten a nested dictionary
         def flatten_dict(d, parent_key=''):
