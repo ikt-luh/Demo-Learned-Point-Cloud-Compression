@@ -41,6 +41,7 @@ services:
     container_name: mediaserver
     volumes:
       - ../shared/:/app/shared/:ro
+      - ../results/sender/:/app/results/sender/
       - type: tmpfs
         target: /media
         tmpfs:
