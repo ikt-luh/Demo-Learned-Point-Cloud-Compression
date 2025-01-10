@@ -13,6 +13,7 @@ from datetime import datetime
 from mpd_parser import MPDParser
 from downloader import SegmentDownloader
 from gui import create_flask_app
+from shared.file_utils import process_logs_and_save
 
 LOG = True
 
@@ -25,9 +26,8 @@ class StreamingClient:
 
         # Configuration
         self.mpd_url = config.get("mpd_url")
-        self.max_buffer_size = config.get("client_buffer_size")
         self.request_offset = config.get("request_offset")
-        self.target_fps = config.get("target_fps")
+        self.playout_offset = config.get("playout_offset", 8)
         self.decoder_push_address = config.get("client_push_address")
         self.decoder_pull_address = config.get("client_pull_address")
         self.visualizer_push_address = config.get("visualizer_push_address")
@@ -41,7 +41,8 @@ class StreamingClient:
         self.server_active = False
 
         # Buffers
-        self.playout_buffer = Queue(maxsize=self.max_buffer_size)
+        self.playout_buffer = Queue()
+        self.playout_time_buffer = Queue()
         self.downloaded_segments = Queue()
         
         # ZMQ setup
@@ -58,6 +59,8 @@ class StreamingClient:
         # Logic
         self.segment_downloader = SegmentDownloader(fixed_quality_mode, init_quality)
         self.mpd_parser = MPDParser(self.mpd_url)
+
+        self.csv_file = None
  
 
     def download_loop(self):
@@ -107,6 +110,8 @@ class StreamingClient:
             print("segment_downloader: Not downloaded...", flush=True)
 
 
+
+
     def decoder_receiver(self):
         """Receives processed data from the decoder."""
         while True:
@@ -114,9 +119,11 @@ class StreamingClient:
             segment = pickle.loads(decoded_data)
             data = segment["data"]
             sideinfo = segment["sideinfo"]
-            print(sideinfo["ID"], sideinfo["timestamps"])
+            segment_start_time = sideinfo["ID"] + self.playout_offset
+            sideinfo["timestamps"]["playout"] = []
 
-            for frame in data:
+            num_frames = len(data)
+            for i, frame in enumerate(data):
                 points = frame["points"] + 100
                 colors = 255 * frame["colors"]
 
@@ -125,26 +132,38 @@ class StreamingClient:
                 colors_bytes = np.array(colors, dtype=np.uint8).tobytes()
                 data = points_bytes + colors_bytes
 
+                # Compute playout time
+                next_playout_time = segment_start_time + ((i + 1) / num_frames)
                 self.playout_buffer.put(data)
+                self.playout_time_buffer.put(next_playout_time)
+                actual_playout_time = segment_start_time + i / num_frames
+                sideinfo["timestamps"]["playout"].append(next_playout_time)
+
+            if self.csv_file is None:
+                self.csv_file = "./evaluation/logs/receiver/{:015d}.csv".format(math.floor(time.time()))
+
+            process_logs_and_save(sideinfo, self.csv_file)
 
 
     def visualizer_sender(self):
         """Sends processed data to the visualizer."""
         while True:
-            timestamp = datetime.now().timestamp()
-            """
-            if LOG:
-                print("Playoutbufer size: {} Frames, {} sec.".format(self.playout_buffer.qsize(), self.playout_buffer.qsize() * (1 / self.target_fps)), flush=True)
-            """
             while self.playout_buffer.empty():
                 print("Stalling", flush=True)
-                time.sleep(0.1)
-                timestamp = datetime.now().timestamp()
+                time.sleep(0.05)
 
-            data = self.playout_buffer.get()
-            self.visualizer_socket.send(data)
-            
-            sleep_time = max(0, (1/self.target_fps) - (datetime.now().timestamp() - timestamp))
+            # Send Frame
+            frame = self.playout_buffer.get()
+            self.visualizer_socket.send(frame)
+
+            # Sleep until next playout
+            playout_time = self.playout_time_buffer.get()
+            print(playout_time)
+            sleep_time = max(0, playout_time - time.time())
+
+            if sleep_time <= 0:
+                print("Catching up", flush=True)
+
             time.sleep(sleep_time)
 
         

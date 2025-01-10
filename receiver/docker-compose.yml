@@ -4,6 +4,7 @@ services:
       context: ./client
     container_name: client
     volumes:
+      - ../evaluation/logs/receiver/:/app/evaluation/logs/receiver/
       - ../shared/:/app/shared/:ro
       - /tmp/.X11-unix:/tmp/.X11-unix
     environment:
