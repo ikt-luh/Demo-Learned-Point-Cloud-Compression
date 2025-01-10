@@ -11,6 +11,7 @@ from collections import deque
 from datetime import datetime
 from server import HTTPServerHandler
 from mpd_manager import MPDManager
+from shared.file_utils import process_logs_and_save
 
 shared_epoch = datetime(2024, 1, 1, 0, 0, 0).timestamp()
 
@@ -43,9 +44,9 @@ class StreamingServer:
 
         self.segment_buffer = deque()
         self.buffer_lock = threading.Lock()
-        self.io_lock = threading.Lock()
         
         self.cleanup_queue = deque()
+        self.csv_file = None
 
     def start_http_server(self):
         """
@@ -158,37 +159,11 @@ class StreamingServer:
         sideinfo["timestamps"]["server_published"] = time.time()
 
         # Log data to file
-        self.process_logs_and_save(sideinfo)
 
-    def process_logs_and_save(self, data):
         if self.csv_file is None:
             self.csv_file = "./evaluation/logs/sender/{:015d}.csv".format(math.floor(time.time()))
+        process_logs_and_save(sideinfo, self.csv_file)
 
-        # Helper function to flatten a nested dictionary
-        def flatten_dict(d, parent_key=''):
-            items = []
-            for k, v in d.items():
-                new_key = f"{parent_key}_{k}" if parent_key else k
-                if isinstance(v, dict):
-                    items.extend(flatten_dict(v, new_key).items())
-                else:
-                    items.append((new_key, v))
-            return dict(items)
-
-            # Flatten the input dictionary
-        flat_data = flatten_dict(data)
-
-        # If the file doesn't exist, create it with headers
-        file_exists = os.path.isfile(self.csv_file)
-        with open(self.csv_file, mode='a', newline='') as file:
-            writer = csv.DictWriter(file, fieldnames=flat_data.keys())
-
-            # Write headers if the file is new
-            if not file_exists:
-                writer.writeheader()
-
-            # Append the row to the CSV
-            writer.writerow(flat_data)
 
 
     def deserialize_data(self, data):
