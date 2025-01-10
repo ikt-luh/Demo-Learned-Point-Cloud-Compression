@@ -64,7 +64,7 @@ const quaternion = new THREE.Quaternion(); // To rotate based on the headset's o
     }
 
     // Apply scaling to fit the point cloud in the camera's view
-    const scaleFactor = 0.008;  // Scale down the point cloud
+    const scaleFactor = 0.007;  // Scale down the point cloud
     for (let i = 0; i < float32Array.length; i++) {
         float32Array[i] *= scaleFactor; // Scale coordinates
     }

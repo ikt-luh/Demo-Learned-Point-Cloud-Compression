@@ -52,11 +52,10 @@ class Decoder:
         Decode the received data and send it back.
         """
         codec_info, data = data
-        data = pickle.loads(data)
 
         if codec_info == "unified":
             print(f"{time.time()} Sending to decoder", flush=True)
-            data_bitstream = data
+            data_bitstream = pickle.loads(data)
             decompressed_batch = self.codec.decompress(data_bitstream)
 
             # Send decompressed data back via the socket

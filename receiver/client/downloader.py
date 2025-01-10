@@ -6,6 +6,7 @@ class SegmentDownloader:
         self.estimated_bandwidth = 100000 # Init
         self.fixed_quality_mode = fixed_quality_mode
         self.current_quality = init_quality
+        self.segment_duration = 1.0
 
 
     def download_segment(self, base_url, media_template, segment_number):
