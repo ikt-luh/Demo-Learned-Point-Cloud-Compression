@@ -61,12 +61,12 @@ class StreamingServer:
 
         while True:
             serialized_data = self.pull_socket.recv()
-            print("Received {}".format(time.time()), flush=True)
+            t_received = time.time()
             data = self.deserialize_data(serialized_data)
+            data["sideinfo"]["timestamps"]["media_server_received"] = t_received
 
             with self.buffer_lock:
                 self.segment_buffer.append(data)
-            time.sleep(self.segment_duration/2)
 
 
     def process_segments(self):
@@ -74,22 +74,22 @@ class StreamingServer:
         Process buffered data at fixed time intervals (segment_duration).
         """
         while True:
-            timestamp = datetime.now().timestamp()
-            current_segment = math.floor(timestamp/self.segment_duration)
+            #timestamp = datetime.now().timestamp()
+            timestamp = time.time()
+            current_segment_id= math.floor(timestamp/self.segment_duration)
 
             # Process and flush the current segment
             if len(self.segment_buffer) > 0:
                 with self.buffer_lock:
-                    data = self.segment_buffer.popleft()
+                    segment = self.segment_buffer.popleft()
             else:
-                time.sleep(0.2)
+                time.sleep(0.01)
                 continue
 
-            #threading.Thread(target=self.handle_data, args=(data, current_segment)).start()
-            self.handle_data(data, current_segment)
-            self.cleanup_queue.append(current_segment)
+            self.handle_data(segment, current_segment_id)
+            self.cleanup_queue.append(current_segment_id)
 
-            sleep_time = max(0, self.segment_duration - (datetime.now().timestamp() - timestamp))
+            sleep_time = max(0, self.segment_duration - (time.time() - timestamp))
             time.sleep(sleep_time)
 
 
@@ -109,15 +109,15 @@ class StreamingServer:
 
 
 
-    def handle_data(self, data, timestamp):
+    def handle_data(self, segment, timestamp):
         """
         Handle the data
         """
-        _ = data.pop("timestamp", None)
-        _ = data.pop("segment_duration", None)
-        _ = data.pop("frame_rate", None)
+        sideinfo = segment.pop("sideinfo", None)
+        data = segment.pop("compressed_data", None)
 
         segment_number = math.floor((timestamp) / self.segment_duration)
+        sideinfo["ID"] = timestamp
 
         for key in sorted(data):
             item = data[key]
@@ -142,12 +142,17 @@ class StreamingServer:
 
             self.mpd_manager.update_segment(key, "1", segment_path, bandwidth)
 
+
         if not self.mpd_manager.initialized:
             self.mpd_manager.initialized = True
 
         # Update MPD and save it
         self.mpd_manager.update_metadata()
         self.mpd_manager.save_mpd()
+
+        sideinfo["timestamps"]["server_published"] = time.time()
+
+        # Log data to file
 
     def deserialize_data(self, data):
         """

@@ -74,28 +74,18 @@ class Encoder:
             else:
                 # Push the batch to the processing queue
                 self.executor.submit(self.process, batch)
-                #self.batch_queue.put(batch)
 
                 # Reset batch and adjust start time
                 start_time_stamp += self.segment_duration  # Ensure fixed intervals
                 batch = [data]
 
-    """
-    def worker(self):
-        while True:
-            # Wait for a batch to process
-            batch = self.batch_queue.get()
-            if batch is None:
-                break  # Exit worker thread if None is received
-            self.process(batch)
-    """
 
     def process(self, batch):
         # Sampling
-        sampled_batch = self.sample(batch)
+        gop = self.sample(batch)
 
         # Compression
-        compressed_data = self.compress_batch(sampled_batch)
+        compressed_data = self.compress_batch(gop)
 
         # Serialization
         serialized_data = self.serialize_data(compressed_data)
@@ -121,24 +111,40 @@ class Encoder:
         target_timestamps = [start_time + i * step for i in range(n)]
 
         sampled_batch = []
+        sampled_timestamps = []
         for target in target_timestamps:
             closest_frame = min(batch, key=lambda item: abs(item["timestamp"] - target))
             sampled_batch.append(closest_frame)
 
-        return sampled_batch
+        for frame in sampled_batch:
+            timestamp = frame.pop("timestamp")
+            sampled_timestamps.append(timestamp)
 
-    def compress_batch(self, sampled_batch):
+        sampling_timestamp = time.time()
+        data = {
+            "frames": sampled_batch, 
+            "timestamps": {
+                "capturing" : sampled_timestamps,
+                "sampling" : sampling_timestamp
+                } }
+        return data
+
+    def compress_batch(self, gop):
         """
         Mock compression function. Currently, just returns the input.
         """
         data = {}
-        data["timestamp"] = sampled_batch[0]["timestamp"]
-        data["segment_duration"] = self.segment_duration
-        data["frame_rate"] = self.target_fps
+        #data["timestamp"] = sampled_batch[0]["timestamp"]
+        gop["segment_duration"] = self.segment_duration
+        gop["frame_rate"] = self.target_fps
 
-        compressed_data, sideinfo = self.codec.compress(sampled_batch)
+        compressed_data, sideinfo = self.codec.compress(gop)
+        data = {
+            "compressed_data": compressed_data,
+            "sideinfo": sideinfo,
+        }
 
-        return compressed_data  
+        return data  
 
         
 

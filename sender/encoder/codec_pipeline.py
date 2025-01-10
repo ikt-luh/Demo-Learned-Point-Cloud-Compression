@@ -66,8 +66,6 @@ class CompressionPipeline:
         compression_model.load_state_dict(torch.load(weights_path, map_location=self.device))
 
         compression_model.to(self.device)
-        #compression_model.entropy_model.gaussian_conditional.to(torch.device("cpu"))
-        #compression_model.entropy_model.scale_nn.to(torch.device("cpu"))
         compression_model.update()
         compression_model.eval()
 
@@ -98,10 +96,10 @@ class CompressionPipeline:
             y_points = result["y_points"]
 
             # Step 6 (Geometry Compression with G-PCC)
-            points_streams, t_6 = self.geometry_compression_step(y_points)
+            points_streams, t_5 = self.geometry_compression_step(y_points)
 
             result["points_streams"] = points_streams
-            result["t_6"] = t_6
+            result["t_5"] = t_5
             self.adaptive_compression_queue_points.put(result)
 
     def run_hyper_analysis(self):
@@ -162,25 +160,24 @@ class CompressionPipeline:
             k = result["k"]
 
             compressed_data = {}
-            t_5s, t_7s = [], []
+            t_6s, t_7s = [], []
             for i, setting in enumerate(self.settings):
                 # Step 5 (Gaussian Entropy Model)
                 q = torch.tensor([setting], dtype=torch.float, device=self.device)
-                y_strings, y_shapes, t_5 = self.gaussian_model_step(y, y_points, q, gaussian_params)
+                y_strings, y_shapes, t_6 = self.gaussian_model_step(y, y_points, q, gaussian_params)
 
                 # Step 7 (Bitstream Writing)
                 byte_array, t_7 = self.make_bitstream(y_strings, z_strings, y_shapes, z_shapes, points_streams, k, q)
 
                 compressed_data[i] = byte_array
-                t_5s.append(t_5)
+                t_6s.append(t_6)
                 t_7s.append(t_7)
 
 
             result["compressed_data"] = compressed_data
-            result["t_5s"] = t_5s
+            result["t_6s"] = t_6s
             result["t_7s"] = t_7s
             self.results_queue.put(result)
-            # Define the task for parallel execution
 
 
     def compress(self, data):
@@ -190,42 +187,45 @@ class CompressionPipeline:
         Supports multiple calls without conflict.
         """
         t_start = time.time()
-        # Hanlde Uncompressed Data
+
+        # Handle Uncompressed Data
         compressed_data = {}
-        compressed_data[0] = pickle.dumps(data)
+        compressed_data[0] = data["frames"]
 
         pointclouds, sideinfo = self.unpack_batch(data)
 
         self.analysis_queue.put(pointclouds)
         
         result = self.results_queue.get()
-        t_1 = result["t_1"]
-        t_2 = result["t_2"]
-        t_3 = result["t_3"]
-        t_4 = result["t_4"]
-        t_5s = result["t_5s"]
-        t_6 = result["t_6"]
-        t_7s = result["t_7s"]
-        z_shapes = result["z_shapes"]
+
+        sideinfo["time_measurements"] = {}
+        sideinfo["time_measurements"]["analysis"] = result["t_1"]
+        sideinfo["time_measurements"]["hyper_analysis"] = result["t_2"]
+        sideinfo["time_measurements"]["factorized_model"] = result["t_3"]
+        sideinfo["time_measurements"]["hyper_synthesis"] = result["t_4"]
+        sideinfo["time_measurements"]["geometry_comprresion"] = result["t_5"]
+        sideinfo["time_measurements"]["gaussian_model"] = result["t_6s"]
+        sideinfo["time_measurements"]["bitstream_writing"] = result["t_7s"]
+
 
         # Append Compressed data
         for key, item in result["compressed_data"].items():
-            print(key+1)
             compressed_data[key+1] = item
 
+        """
         # Logging
         num_points = pointclouds.C.shape[0]
         num_frames = len(z_shapes)
-        t_sum = t_1 + t_2 + t_3 + t_4 + sum(t_5s) + t_6 + sum(t_7s)
+        t_sum = t_1 + t_2 + t_3 + t_4 + t_5 + sum(t_6s) + sum(t_7s)
         print("+++++++++++++++++++++++++++++++++++++++++++++++", flush=True)
         print("Step 1 (Analysis): \t\t {:.3f} seconds".format(t_1), flush=True)
         print("Step 2 (Hyper Analysis): \t {:.3f} seconds".format(t_2), flush=True)
         print("Step 3 (Fact. Entr. Model): \t {:.3f} seconds".format(t_3), flush=True)
         print("Step 4 (Hyper Synthesis): \t {:.3f} seconds".format(t_4), flush=True)
-        print("Step 5 (G-PCC): \t\t\t {:.3f} seconds".format(t_6), flush=True)
-        for i, (t_5, t_7) in enumerate(zip(t_5s, t_7s)):
+        print("Step 5 (G-PCC): \t\t\t {:.3f} seconds".format(t_5), flush=True)
+        for i, (t_6, t_7) in enumerate(zip(t_6s, t_7s)):
             print("\tQuality {}".format(i), flush=True)
-            print("\tStep 6 (Gaussian Model): \t {:.3f} seconds".format(t_5), flush=True)
+            print("\tStep 6 (Gaussian Model): \t {:.3f} seconds".format(t_6), flush=True)
             print("\tStep 7 (Bitstream Writer): \t {:.3f} seconds".format(t_7), flush=True)
             print("Bitstream length: \t\t {} bits".format(len(compressed_data[i+1]) * 8), flush=True)
             print("BPP: \t\t\t\t {:.3f}".format((len(compressed_data[i+1]) * 8) / num_points), flush=True)
@@ -234,27 +234,28 @@ class CompressionPipeline:
         print("Num Frames: {} ".format(num_frames), flush=True)
         print("Compression time: {:.3f} sec".format(t_sum))
         print("+++++++++++++++++++++++++++++++++++++++++++++++", flush=True)
+        """
 
         t_end = time.time()
-        print("Compression time: {:.3f} sec".format(t_end - t_start), flush=True)
+        sideinfo["timestamps"]["codec_start"] = t_start
+        sideinfo["timestamps"]["codec_end"] = t_end
         return compressed_data, sideinfo 
 
 
-    def unpack_batch(self, batch):
+    def unpack_batch(self, gop):
         """
         Unpacks the batch to receive torch point cloud and a list of side-info
         """
-        sideinfo = []
+        frames = gop.pop("frames")
 
         points, colors = [], []
-        for item in batch:
+        for item in frames:
             # Sometimes we miss a frame? 
             if not "points" in item.keys():
                 continue
 
-            item_points = item.pop("points")
-            item_colors = item.pop("colors")
-            sideinfo.append(item)
+            item_points = item["points"]
+            item_colors = item["colors"]
             points.append(item_points)
             colors.append(item_colors)
 
@@ -269,7 +270,7 @@ class CompressionPipeline:
             features=colors,
             device=self.device
         )
-        return pointcloud, sideinfo
+        return pointcloud, gop
 
 
     def analysis_step(self, data):

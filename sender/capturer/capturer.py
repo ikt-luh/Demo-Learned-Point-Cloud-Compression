@@ -137,7 +137,7 @@ class Capturer():
         Grab a frame from a ZED Camera and computes the Point Cloud
         """
         if self.zed.grab() == sl.ERROR_CODE.SUCCESS:
-            t0 = time.time()
+            timestamp = time.time()
             self.zed.retrieve_measure(self.pointcloud, sl.MEASURE.XYZRGBA, sl.MEM.CPU, self.res)
 
             # Get Point Cloud from frame
@@ -178,7 +178,7 @@ class Capturer():
                 points = points[indices]
                 colors = colors[indices]
 
-            data = { "points": points, "colors": colors, "timestamp": t0 }
+            data = { "points": points, "colors": colors, "timestamp": timestamp }
             return data
         else:
             return None
