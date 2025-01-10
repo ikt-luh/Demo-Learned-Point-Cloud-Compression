@@ -91,10 +91,18 @@ class StreamingClient:
         data = self.segment_downloader.download_segment(base_url, media_template, next_segment_number)
         codec_info = self.mpd_parser.get_codec_info(self.segment_downloader.current_quality)
 
+        sideinfo = {"timestamps": {}}
+        sideinfo["ID"] = next_segment_number
+        sideinfo["quality"] = self.segment_downloader.current_quality
+        sideinfo["codec_info"] = codec_info
+        sideinfo["timestamps"]["client_received"] = time.time()
+
         if data:
-            print("Downloaded segment {}".format(next_segment_number), flush=True)
+            segment = {"data": data, "sideinfo": sideinfo}
             self.downloaded_segments.put(next_segment_number)
-            self.decoder_push_socket.send(pickle.dumps([codec_info, data]))
+            self.decoder_push_socket.send(pickle.dumps(segment))
+
+            print("Downloaded segment {}".format(next_segment_number), flush=True)
         else: 
             print("segment_downloader: Not downloaded...", flush=True)
 
@@ -103,12 +111,14 @@ class StreamingClient:
         """Receives processed data from the decoder."""
         while True:
             decoded_data = self.decoder_pull_socket.recv()
-            data = pickle.loads(decoded_data)
+            segment = pickle.loads(decoded_data)
+            data = segment["data"]
+            sideinfo = segment["sideinfo"]
+            print(sideinfo["ID"], sideinfo["timestamps"])
 
             for frame in data:
                 points = frame["points"] + 100
                 colors = 255 * frame["colors"]
-                #timestamp = frame["timestamp"]
 
                 # Pack to bytes
                 points_bytes = np.array(points, dtype=np.float32).tobytes()

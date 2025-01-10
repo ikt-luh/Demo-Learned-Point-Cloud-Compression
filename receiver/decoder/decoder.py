@@ -47,21 +47,25 @@ class Decoder:
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)  # Adjust workers as needed
 
 
-    def decode_and_send(self, data):
+    def decode_and_send(self, segment):
         """
         Decode the received data and send it back.
         """
-        codec_info, data = data
+        sideinfo = segment["sideinfo"]
+        data = segment["data"]
+        sideinfo["timestamps"]["decoder_received"] = time.time()
 
-        if codec_info == "unified":
+        if sideinfo["codec_info"] == "unified":
             print(f"{time.time()} Sending to decoder", flush=True)
             data_bitstream = pickle.loads(data)
-            decompressed_batch = self.codec.decompress(data_bitstream)
 
-            # Send decompressed data back via the socket
-            self.push_socket.send(pickle.dumps(decompressed_batch))
+            data = self.codec.decompress(data_bitstream)
         else:
-            self.push_socket.send(data)
+            data = pickle.loads(data)
+
+        sideinfo["timestamps"]["decoder_finished"] = time.time()
+        segment = {"data": data, "sideinfo": sideinfo}
+        self.push_socket.send(pickle.dumps(segment))
 
     def run(self):
         """
@@ -70,10 +74,10 @@ class Decoder:
         while True:
             # Receive data
             raw_data = self.pull_socket.recv()
-            data = pickle.loads(raw_data)
+            segment = pickle.loads(raw_data)
 
             # Submit decoding task to the thread pool
-            self.executor.submit(self.decode_and_send, data)
+            self.executor.submit(self.decode_and_send, segment)
 
     
 
