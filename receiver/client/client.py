@@ -66,24 +66,28 @@ class StreamingClient:
     def download_loop(self):
         """Periodically checks and updates MPD."""
         while True:
-            timestamp = datetime.now().timestamp() 
-
             while not self.mpd_parser.update_mpd():
                 print("Waiting for MPD to become available", flush=True)
+
 
             segment_duration = self.mpd_parser.get_segment_duration()
             publish_time = self.mpd_parser.get_publish_time()
 
             if publish_time != self.last_publish_time:
+                timestamp = time.time()
                 self.last_publish_time = publish_time
-                next_segment_number = math.floor((timestamp - self.request_offset) / segment_duration)
+                next_segment_number = math.floor(timestamp  / segment_duration)
 
                 if next_segment_number > self.last_segment_number:
+                    print(next_segment_number)
                     self.download_segment(next_segment_number)
                     self.last_segment_number = next_segment_number
 
-            sleep_time = max(0, segment_duration - (datetime.now().timestamp() - timestamp))
-            time.sleep(sleep_time)
+                wake_up_time = (next_segment_number + 1) * segment_duration + self.request_offset
+                sleep_time = max(0, wake_up_time - time.time())
+                time.sleep(sleep_time)
+            else:
+                time.sleep(0.3)
             
 
     def download_segment(self, next_segment_number):

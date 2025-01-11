@@ -153,29 +153,21 @@ class DecompressionPipeline:
         # Postprocessing: Pack data back into batches
         final_data, t_7 = self.pack_batches(reconstructed_pointcloud)
 
-        # Logging
-        t_1 = result["t_1"]
-        t_2 = result["t_2"]
-        t_3 = result["t_3"]
-        t_4 = result["t_4"]
-        t_5 = result["t_5"]
-        t_6 = result["t_6"]
-        t_sum = t_1 + t_2 + t_3 + t_4 + t_5 + t_6 + t_7
-        if LOG:
-            print("Step 1 (Bitstream Reading): \t {:.3f} seconds".format(t_1), flush=True)
-            print("Step 2 (Geometry Decompression): \t {:.3f} seconds".format(t_2), flush=True)
-            print("Step 3 (Factorized Model): \t {:.3f} seconds".format(t_3), flush=True)
-            print("Step 4 (Hyper Synthesis): \t {:.3f} seconds".format(t_4), flush=True)
-            print("Step 5 (Gaussian Model): \t\t {:.3f} seconds".format(t_5), flush=True)
-            print("Step 6 (Synthesis): \t\t {:.3f} seconds".format(t_6), flush=True)
-            print("Step 7 (Postprocessing): \t\t {:.3f} seconds".format(t_7), flush=True)
-            print("-------------------------------------------------", flush=True)
-            print("Decoding Total: \t\t {:.3f} seconds".format(t_sum), flush=True)
+        sideinfo = {"time_measurements": {}, "timestamps": {}}
+        sideinfo["time_measurements"]["bitstream_reading"] = result["t_1"]
+        sideinfo["time_measurements"]["geometry_decompression"] = result["t_2"]
+        sideinfo["time_measurements"]["factorized_model"] = result["t_3"]
+        sideinfo["time_measurements"]["hyper_synthesis"] = result["t_4"]
+        sideinfo["time_measurements"]["guassian_model"] = result["t_5"]
+        sideinfo["time_measurements"]["synthesis_transform"] = result["t_6"]
 
         t_end = time.time()
         print("Decompression time: {:.3f} sec".format(t_end - t_start), flush=True)
-        print("Done at {}".format(t_end), flush=True)
-        return final_data
+        sideinfo["timestamps"]["codec_start"] = t_start
+        sideinfo["timestamps"]["codec_end"] = t_end
+        print("done")
+
+        return final_data, sideinfo
 
 
     def read_bitstream(self, compressed_data):

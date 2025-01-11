@@ -59,10 +59,19 @@ class Decoder:
             print(f"{time.time()} Sending to decoder", flush=True)
             data_bitstream = pickle.loads(data)
 
-            data = self.codec.decompress(data_bitstream)
+            data, codec_info = self.codec.decompress(data_bitstream)
+            
         else:
             data = pickle.loads(data)
+            # Mock cells for direct loading
+            codec_info = {
+                "time_measurements": { "bitstream_reading": 0.0, "geometry_decompression" :0.0, "factorized_model" :0.0, "hyper_synthesis" :0.0, "guassian_model" :0.0, "synthesis_transform" :0.0, "postprocessing" :0.0, },
+                "timestamps": { "codec_start": time.time(), "codec_end": time.time() }
+            }
 
+        # Add sideinfo
+        sideinfo["timestamps"].update(codec_info["timestamps"])
+        sideinfo["time_measurements"] = codec_info["time_measurements"]
         sideinfo["timestamps"]["decoder_finished"] = time.time()
         segment = {"data": data, "sideinfo": sideinfo}
         self.push_socket.send(pickle.dumps(segment))
