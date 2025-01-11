@@ -44,7 +44,7 @@ class Capturer():
             # Grab the point cloud
             if self.mode == "playback":
                 pointcloud = self.playback_frames()
-            else:
+            elif self.mode == "demo" or self.mode == "recording": 
                 pointcloud = self.get_zed_frames()
 
             # Serialize it
@@ -127,6 +127,8 @@ class Capturer():
 
             if self.mode == "record":
                 self.record_frame(data)
+
+            print("Captured", flush=True)
             return data
         else:
             return None

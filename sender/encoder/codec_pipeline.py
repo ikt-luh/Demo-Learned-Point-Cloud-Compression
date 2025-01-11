@@ -80,6 +80,7 @@ class CompressionPipeline:
                 y, k, y_points, t_1 = self.analysis_step(pointclouds) 
 
             result = {
+                "pointclouds": pointclouds,
                 "y": y,
                 "k" : k,
                 "y_points": y_points,
@@ -198,6 +199,10 @@ class CompressionPipeline:
         
         result = self.results_queue.get()
 
+        # Append Compressed data
+        for key, item in result["compressed_data"].items():
+            compressed_data[key+1] = item
+
         sideinfo["time_measurements"] = {}
         sideinfo["time_measurements"]["analysis"] = result["t_1"]
         sideinfo["time_measurements"]["hyper_analysis"] = result["t_2"]
@@ -206,35 +211,11 @@ class CompressionPipeline:
         sideinfo["time_measurements"]["geometry_comprresion"] = result["t_5"]
         sideinfo["time_measurements"]["gaussian_model"] = result["t_6s"]
         sideinfo["time_measurements"]["bitstream_writing"] = result["t_7s"]
-
-
-        # Append Compressed data
-        for key, item in result["compressed_data"].items():
-            compressed_data[key+1] = item
-
-        """
-        # Logging
-        num_points = pointclouds.C.shape[0]
-        num_frames = len(z_shapes)
-        t_sum = t_1 + t_2 + t_3 + t_4 + t_5 + sum(t_6s) + sum(t_7s)
-        print("+++++++++++++++++++++++++++++++++++++++++++++++", flush=True)
-        print("Step 1 (Analysis): \t\t {:.3f} seconds".format(t_1), flush=True)
-        print("Step 2 (Hyper Analysis): \t {:.3f} seconds".format(t_2), flush=True)
-        print("Step 3 (Fact. Entr. Model): \t {:.3f} seconds".format(t_3), flush=True)
-        print("Step 4 (Hyper Synthesis): \t {:.3f} seconds".format(t_4), flush=True)
-        print("Step 5 (G-PCC): \t\t\t {:.3f} seconds".format(t_5), flush=True)
-        for i, (t_6, t_7) in enumerate(zip(t_6s, t_7s)):
-            print("\tQuality {}".format(i), flush=True)
-            print("\tStep 6 (Gaussian Model): \t {:.3f} seconds".format(t_6), flush=True)
-            print("\tStep 7 (Bitstream Writer): \t {:.3f} seconds".format(t_7), flush=True)
-            print("Bitstream length: \t\t {} bits".format(len(compressed_data[i+1]) * 8), flush=True)
-            print("BPP: \t\t\t\t {:.3f}".format((len(compressed_data[i+1]) * 8) / num_points), flush=True)
-        print("-----------------------------------------------", flush=True)
-        print("Num Points - (Total): {} Per Frame {:.3f}".format(num_points, num_points/num_frames), flush=True)
-        print("Num Frames: {} ".format(num_frames), flush=True)
-        print("Compression time: {:.3f} sec".format(t_sum))
-        print("+++++++++++++++++++++++++++++++++++++++++++++++", flush=True)
-        """
+        num_points = result["pointclouds"].C.shape[0]
+        sideinfo["gop_info"] = {}
+        sideinfo["gop_info"]["num_points"] = num_points
+        sideinfo["gop_info"]["bandwidth"] = [len(d) * 8 for d in compressed_data.items()]
+        sideinfo["gop_info"]["bpp"] = [len(d) / num_points * 8 for d in compressed_data.items()]
 
         t_end = time.time()
         sideinfo["timestamps"]["codec_start"] = t_start
