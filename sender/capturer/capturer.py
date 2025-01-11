@@ -1,3 +1,4 @@
+import os
 import yaml
 import pickle
 import zmq
@@ -17,10 +18,16 @@ class Capturer():
             config = {}
 
         self.camera = config.get("camera")
+        self.mode = config.get("mode", "demo") # None, Record, Playback
+        self.recording_path = config.get("recording_path", None)
         self.depth_clip = config.get("depth_clip", -1.5)
         self.voxel_size = config.get("voxel_size", 0.01)
         self.max_points = config.get("max_points", None)
         self.capturer_push_address = config.get("capturer_push_address")
+
+        # For Playback mode
+        self.frame_id = 0
+        self.frame_buffer = None
 
         # Camera setup
         if self.camera == "zed":
@@ -35,7 +42,9 @@ class Capturer():
     def run(self):
         while True:
             # Grab the point cloud
-            if self.camera == "zed": 
+            if self.mode == "playback":
+                pointcloud = self.playback_frames()
+            else:
                 pointcloud = self.get_zed_frames()
 
             # Serialize it
@@ -114,9 +123,55 @@ class Capturer():
                 colors = colors[indices]
 
             data = { "points": points, "colors": colors, "timestamp": timestamp }
+
+
+            if self.mode == "record":
+                self.record_frame(data)
             return data
         else:
             return None
+
+    def record_frame(self, data):
+        if data is None:
+            return
+
+        timestamp = data["timestamp"]
+        file_path = os.path.join(self.recording_path, f"frame_{self.frame_id:05d}.pkl")
+        with open(file_path, "wb") as file:
+            pickle.dump(data, file)
+
+        self.frame_id += 1
+
+
+    def playback_frames(self):
+        if self.frame_buffer is None:
+            files = sorted([f for f in os.listdir(self.recording_path) if f.endswith(".pkl")])
+
+            # Load all frames
+            self.frame_buffer = []
+            for file_name in files:
+                file_path = os.path.join(self.recording_path, file_name)
+                with open(file_path, "rb") as file:
+                    frame_data = pickle.load(file)
+                    self.frame_buffer.append(frame_data)
+            
+            # Manipulate the time stamps
+            start_time = time.time() + 2.0
+            offset = self.frame_buffer[0]["timestamp"] 
+            for frame in self.frame_buffer:
+                frame["timestamp"] = frame["timestamp"] - offset + start_time            
+
+        # Now we can send frames
+        if len(self.frame_buffer) > 0:
+            data = self.frame_buffer.pop(0)
+            play_time = data["timestamp"]
+
+            sleep_time = max(0, play_time - time.time())
+            time.sleep(sleep_time)
+            return data
+
+
+                 
 
     def serialize_pointcloud(self, data):
         return pickle.dumps(data)

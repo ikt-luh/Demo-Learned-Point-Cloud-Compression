@@ -1,5 +1,7 @@
 # Server
 camera: "zed"
+mode: "playback" # "demo", "playback", "record"
+recording_path: "./evaluation/data/test"
 depth_clip: -1.2
 voxel_size: 0.005
 max_points: 20000

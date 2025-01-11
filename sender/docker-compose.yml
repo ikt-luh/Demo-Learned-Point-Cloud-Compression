@@ -9,6 +9,7 @@ services:
       - /dev/bus/usb:/dev/bus/usb  # Access the camera device
     volumes:
       - ../shared/:/app/shared/:ro
+      - ../evaluation/data/:/app/evaluation/data/
     device_cgroup_rules:
       - 'c 81:* rmw'
       - 'c 189:* rmw'
