@@ -128,7 +128,6 @@ class Capturer():
             if self.mode == "record":
                 self.record_frame(data)
 
-            print("Captured", flush=True)
             return data
         else:
             return None
