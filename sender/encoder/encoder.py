@@ -83,6 +83,7 @@ class Encoder:
     def process(self, batch):
         # Sampling
         gop = self.sample(batch)
+        print("NUM FRAMES: {}".format(len(gop["frames"])), flush=True)
 
         # Compression
         compressed_data = self.compress_batch(gop)

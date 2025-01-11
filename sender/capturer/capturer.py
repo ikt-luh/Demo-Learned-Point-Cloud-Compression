@@ -125,7 +125,7 @@ class Capturer():
             data = { "points": points, "colors": colors, "timestamp": timestamp }
 
 
-            if self.mode == "record":
+            if self.mode == "recording":
                 self.record_frame(data)
 
             return data
