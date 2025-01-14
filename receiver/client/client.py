@@ -80,7 +80,6 @@ class StreamingClient:
                 next_segment_number = math.floor(timestamp  / segment_duration)
 
                 if next_segment_number > self.last_segment_number:
-                    print(next_segment_number)
                     self.download_segment(next_segment_number)
                     self.last_segment_number = next_segment_number
 
