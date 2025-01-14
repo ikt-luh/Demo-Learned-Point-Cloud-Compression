@@ -14,9 +14,9 @@ encoding_settings:
 
 # Client
 decoder_type: "parallel"
-request_offset: 0.1
-playout_offset: 3.0
-fixed_quality: 0
+request_offset: 0.3
+playout_offset: 2.0
+init_quality: 2
 
 # ZMQ
 capturer_push_address: "tcp://encoder:5555"
