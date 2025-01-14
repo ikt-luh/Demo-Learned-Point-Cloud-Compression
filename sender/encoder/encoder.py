@@ -47,7 +47,7 @@ class Encoder:
         self.worker_thread.daemon = True
         self.worker_thread.start()
         """
-        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=8)
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=3)
 
         self.codec = CompressionPipeline(self.encoding_settings)
 

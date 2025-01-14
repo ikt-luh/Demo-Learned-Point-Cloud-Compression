@@ -29,6 +29,7 @@ class StreamingServer:
         self.port = config.get("port")
         self.output_directory = config.get("output_directory")
         self.segment_duration = config.get("segment_duration")
+        self.publish_offset = config.get("publish_offset")
         self.pull_address = config.get("media_server_pull_address")
 
         self.csv_file = None
@@ -122,7 +123,10 @@ class StreamingServer:
         sideinfo = segment.pop("sideinfo", None)
         data = segment.pop("compressed_data", None)
 
-        segment_number = math.floor((timestamp) / self.segment_duration)
+        publishing_time_stamp = sum(sideinfo["timestamps"]["capturing"]) / len(sideinfo["timestamps"]["capturing"]) + self.publish_offset
+        print(publishing_time_stamp)
+        segment_number = math.floor((publishing_time_stamp) / self.segment_duration)
+        #segment_number = math.floor((timestamp) / self.segment_duration)
         sideinfo["ID"] = timestamp
 
         for key in sorted(data):
