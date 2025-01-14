@@ -28,7 +28,9 @@ colors = [
 logs_base_path = "./logs"
 figures_path = "./figures"
 highest_fps = 10
-sequences = ["jacket"]
+sequences = ["test"]
+fps_min = 1
+fps_max = 6
 
 
 def plot():
@@ -43,7 +45,7 @@ def plot():
 def load_data(save=False):
     merged_results = []
 
-    for fps in range(1, highest_fps + 1):
+    for fps in range(fps_min, fps_max+1):
         for seq in sequences:
             sender_path = os.path.join(logs_base_path, "sender", f"{seq}_{fps}fps.csv")
             receiver_path = os.path.join(logs_base_path, "receiver", f"{seq}_{fps}fps.csv")
@@ -81,7 +83,7 @@ def plot_coding_times(all_data):
     decoder_timings = {seq: [] for seq in sequences}
     
     for seq in sequences:
-        for fps in range(1, highest_fps + 1):
+        for fps in range(fps_min, fps_max + 1):
             # Filter data for the specific sequence and FPS
             data = all_data.loc[(all_data["fps_sender"] == fps) & (all_data["sequence_sender"] == seq)]
             
@@ -100,7 +102,7 @@ def plot_coding_times(all_data):
                 data["time_measurements_factorized_model_sender"].mean(),
                 data["time_measurements_hyper_synthesis_sender"].mean(),
                 data["time_measurements_gaussian_model"].mean(),
-                data["time_measurements_geometry_comprresion"].mean(),
+                data["time_measurements_geometry_compression"].mean(),
                 data["time_measurements_bitstream_writing"].mean(),
             ])
             
@@ -115,8 +117,8 @@ def plot_coding_times(all_data):
             ])
 
     # Create DataFrames for encoder and decoder timings
-    encoder_df = pd.DataFrame(encoder_timings, index=range(1, highest_fps + 1))
-    decoder_df = pd.DataFrame(decoder_timings, index=range(1, highest_fps + 1))
+    encoder_df = pd.DataFrame(encoder_timings, index=range(fps_min, fps_max + 1))
+    decoder_df = pd.DataFrame(decoder_timings, index=range(fps_min, fps_max + 1))
 
     plot_stacked_bar_chart(encoder_df, 
         steps=["E1", "E2", "E3", "E4", "E5", "E6", "E7"], 
@@ -140,10 +142,10 @@ def plot_coding_times_vs_num_points(all_data):
     fig2, ax2 = plt.subplots(figsize=(6, 3))
 
     cmap = cm.tab10  # You can change this to any other colormap like 'plasma', 'inferno', etc.
-    norm = mcolors.Normalize(vmin=0.5, vmax=10.5)
+    norm = mcolors.Normalize(vmin=0.5, vmax=fps_max + 0.5)
 
     for seq in sequences:
-        for fps in range(1, highest_fps + 1):
+        for fps in range(fps_min, fps_max + 1):
             data = all_data.loc[(all_data["fps_sender"] == fps) & (all_data["sequence_sender"] == seq)]
             encoding_times = data["encoding_time"][3:]
             decoding_times = data["decoding_time"][3:]
@@ -155,8 +157,8 @@ def plot_coding_times_vs_num_points(all_data):
             ax2.scatter(num_points, decoding_times * 1000, color=[color] * len(num_points))
 
     # Add colorbars to indicate the FPS gradient
-    fig1.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax1, ticks=range(1,11), label="Frames per Segment")
-    fig2.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax2, ticks=range(1,11), label="Frames per Segment")
+    fig1.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax1, ticks=range(fps_min,fps_max + 1), label="Frames per Segment")
+    fig2.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax2, ticks=range(fps_min,fps_max + 1), label="Frames per Segment")
 
     # Set titles and labels
     ax1.set_xlabel("Number of Points")
@@ -188,7 +190,7 @@ def plot_stacked_bar_chart(df, steps, labels,  title):
         "D1":"XX", "D2":"//", "D3":"++", "D4":"..", "D5":"..", "D6":"XX"   
     }
     bar_width = 0.8  # Width of each bar
-    x = np.arange(1, highest_fps + 1)  # FPS values
+    x = np.arange(fps_min, fps_max + 1)  # FPS values
         
     fig, ax = plt.subplots(figsize=(8, 4))
     offsets = np.arange(0, len(sequences) * bar_width, bar_width)  # Bar positions for each sequence
@@ -208,13 +210,13 @@ def plot_stacked_bar_chart(df, steps, labels,  title):
     # Customizing the plot
     ax.set_axisbelow(True)
     ax.yaxis.grid(color='gray')
-    ax.set_xlim([0.5, 10.5])
+    ax.set_xlim([fps_min-0.5, fps_max + 0.5])
     #ax.plot([0.5, 10.5], [1000, 1000], color="gray", linestyle="dashed")
 
     ax.set_xlabel("Frames per segment")
     ax.set_ylabel("Average Time (ms)")
     ax.set_xticks(x + bar_width * (len(sequences) - 1) / 2)
-    ax.set_xticklabels(range(1, highest_fps + 1))
+    ax.set_xticklabels(range(fps_min, fps_max + 1))
     ax.legend(loc="upper left")#, bbox_to_anchor=(1, 1))
     
     # Save the plot
@@ -223,8 +225,8 @@ def plot_stacked_bar_chart(df, steps, labels,  title):
 
 def plot_end_to_end_latency(all_data):
     for idx, seq in enumerate(sequences):
-        for fps in range(1, 11):
-            data = all_data.loc[(all_data["fps_sender"] == fps) & (all_data["sequence_sender"] == seq)]
+        for fps in range(fps_min, fps_max + 1):
+            data = all_data.loc[(all_data["fps_sender"] == fps) & (all_data["sequence_sender"] == seq)][3:]
             succesfull_data = data.loc[(data["packet_received"] == True)]
             unsuccesfull_data = data.loc[data["packet_received"] == False]
 
@@ -243,25 +245,28 @@ def plot_end_to_end_latency(all_data):
             
 
 
-            fig, ax = plt.subplots(figsize=(8, 4))
+            fig, ax = plt.subplots(figsize=(10, 4))
         
-            labels = ["Capturer", "Enc. queue", "Encoder", "Publishing", "Transmission", "Decoder", "Buffer"]
+            labels = ["Capturer", "Encoder", "Publishing", "Transmission", "Decoder", "Buffer"]
             hatches = ["XX", "//" , "XX", "//", "XX", "//"]
-            colors = ["#FFCCFF", "#00FF81", "red", "green", "#00FF81", "grey"]
+            colors = ["#ffcdad", "#f66909", "#522303", "#add8fc", "#088bf7", "#032e52"]
             stacks = ax.stackplot(x, 
                 s_1, s_2, s_3,
                 r_1, r_2, r_3,
                 colors=colors,
                 labels=labels)
 
-            plt.plot(x, sum([s_1, s_2, s_3]), label="Sender - Client", color="red")
+            #plt.plot(x, sum([s_1, s_2, s_3]), label="Sender - Client", color="red")
 
+            """
             for stack, hatch in zip(stacks, hatches):
                 stack.set_hatch(hatch)
+            """
 
             ax.set_xlabel("Segment ID")
             ax.set_ylabel("Latency from capturing (s)")
-            ax.legend(loc="center left", bbox_to_anchor=(1,0.5))
+            #ax.legend(loc="center left", bbox_to_anchor=(1,0.5))
+            ax.legend(loc=9, bbox_to_anchor=(0.5, -0.15), ncol=6)
             ax.set_xlim(0, len(data) - 1)
 
             plt.savefig(os.path.join(figures_path, f"end-to-end-latency_{seq}_{fps}fps.pdf"), bbox_inches="tight") 
