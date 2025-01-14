@@ -208,14 +208,14 @@ class CompressionPipeline:
         sideinfo["time_measurements"]["hyper_analysis"] = result["t_2"]
         sideinfo["time_measurements"]["factorized_model"] = result["t_3"]
         sideinfo["time_measurements"]["hyper_synthesis"] = result["t_4"]
-        sideinfo["time_measurements"]["geometry_comprresion"] = result["t_5"]
+        sideinfo["time_measurements"]["geometry_compression"] = result["t_5"]
         sideinfo["time_measurements"]["gaussian_model"] = result["t_6s"]
         sideinfo["time_measurements"]["bitstream_writing"] = result["t_7s"]
         num_points = result["pointclouds"].C.shape[0]
         sideinfo["gop_info"] = {}
         sideinfo["gop_info"]["num_points"] = num_points
-        sideinfo["gop_info"]["bandwidth"] = [len(d) * 8 for d in compressed_data.items()]
-        sideinfo["gop_info"]["bpp"] = [len(d) / num_points * 8 for d in compressed_data.items()]
+        sideinfo["gop_info"]["bandwidth"] = [8 * 6 * num_points if idx == 0 else len(d) * 8 for idx, (key, d) in enumerate(compressed_data.items())]
+        sideinfo["gop_info"]["bpp"] = [bw / num_points for bw in sideinfo["gop_info"]["bandwidth"]]
 
         t_end = time.time()
         sideinfo["timestamps"]["codec_start"] = t_start

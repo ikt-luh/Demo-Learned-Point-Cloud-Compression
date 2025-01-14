@@ -9,7 +9,6 @@ import numpy as np
 import torch
 import concurrent.futures
 
-#from codec_single import CompressionPipeline
 from codec_pipeline import CompressionPipeline
 
 class Encoder:
@@ -48,7 +47,7 @@ class Encoder:
         self.worker_thread.daemon = True
         self.worker_thread.start()
         """
-        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=8)
 
         self.codec = CompressionPipeline(self.encoding_settings)
 

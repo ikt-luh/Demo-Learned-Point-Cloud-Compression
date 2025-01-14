@@ -94,7 +94,8 @@ class Capturer():
             colors = np.stack([((int_colors >> (8 * i)) & 0xFF) for i in range(3)], axis=-1).reshape(-1, 3)
 
             # Remove invalid points (e.g., NaN or extreme values)
-            valid_mask = np.isfinite(points).all(axis=1) & (points[:, 2] >= self.depth_clip)
+            distances = np.linalg.norm(points, axis=1)
+            valid_mask = np.isfinite(points).all(axis=1) & (distances <= self.depth_clip)
             points = points[valid_mask]
             colors = colors[valid_mask] 
 
