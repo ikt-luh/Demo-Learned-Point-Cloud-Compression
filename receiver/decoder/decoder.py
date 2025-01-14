@@ -44,7 +44,7 @@ class Decoder:
             self.codec = DecoderParallel()
         
          # Thread pool for parallel decoding
-        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)  # Adjust workers as needed
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=3)  # Adjust workers as needed
 
 
     def decode_and_send(self, segment):

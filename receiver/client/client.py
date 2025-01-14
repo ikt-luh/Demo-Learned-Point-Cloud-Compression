@@ -33,7 +33,7 @@ class StreamingClient:
         self.visualizer_push_address = config.get("visualizer_push_address")
 
         fixed_quality_mode = config.get("fixed_quality_mode", True)
-        init_quality = config.get("init_quality", 0)
+        init_quality = config.get("init_quality", 2)
 
         # MPD Data
         self.segment_duration = None
@@ -43,6 +43,7 @@ class StreamingClient:
         # Buffers
         self.playout_buffer = Queue()
         self.playout_time_buffer = Queue()
+        self.sideinfo_queue = Queue()
         self.downloaded_segments = Queue()
         
         # ZMQ setup
@@ -87,7 +88,7 @@ class StreamingClient:
                 sleep_time = max(0, wake_up_time - time.time())
                 time.sleep(sleep_time)
             else:
-                time.sleep(0.3)
+                time.sleep(0.1)
             
 
     def download_segment(self, next_segment_number):
@@ -123,7 +124,7 @@ class StreamingClient:
             segment = pickle.loads(decoded_data)
             data = segment["data"]
             sideinfo = segment["sideinfo"]
-            segment_start_time = sideinfo["ID"] + self.playout_offset
+            segment_start_time = max(sideinfo["ID"] + self.playout_offset, time.time())
             sideinfo["timestamps"]["playout"] = []
 
             num_frames = len(data)
@@ -140,7 +141,7 @@ class StreamingClient:
                 next_playout_time = segment_start_time + ((i + 1) / num_frames)
                 self.playout_buffer.put(data)
                 self.playout_time_buffer.put(next_playout_time)
-                actual_playout_time = segment_start_time + i / num_frames
+
                 sideinfo["timestamps"]["playout"].append(next_playout_time)
 
             if self.csv_file is None:
@@ -151,6 +152,7 @@ class StreamingClient:
 
     def visualizer_sender(self):
         """Sends processed data to the visualizer."""
+        counter = 0 
         while True:
             while self.playout_buffer.empty():
                 print("Stalling", flush=True)
@@ -162,7 +164,8 @@ class StreamingClient:
 
             # Sleep until next playout
             playout_time = self.playout_time_buffer.get()
-            print(playout_time)
+
+
             sleep_time = max(0, playout_time - time.time())
 
             if sleep_time <= 0:
