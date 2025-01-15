@@ -122,8 +122,8 @@ class CompressionPipeline:
             z = result["z"]
 
             # Step 3 (Factorized Entropy Model)
-            z_hat, z_strings, z_shapes, z_points, t_3 = self.factorized_model_step(z)
-
+            z_hat, z_strings, z_shapes, z_points, t_3 = self.factorized_model_step_batched(z)
+            #z_hat, z_strings, z_shapes, z_points, t_3 = self.factorized_model_step(z)
 
             result["z_hat"] = z_hat
             result["z_strings"] = z_strings
@@ -161,11 +161,21 @@ class CompressionPipeline:
             k = result["k"]
 
             compressed_data = {}
+            y_strings, y_shapes, t_6 = self.gaussian_model_step_batched(y, y_points, self.settings, gaussian_params)
+                
+            for i, q in enumerate(self.settings):
+                byte_array, t_7 = self.make_bitstream_batched(y_strings[i], z_strings, y_shapes, z_shapes, points_streams, k, q)
+                compressed_data[i] = byte_array
+
+            print("Batched {}".format(t_6), flush=True)
+            """
             t_6s, t_7s = [], []
             for i, setting in enumerate(self.settings):
                 # Step 5 (Gaussian Entropy Model)
                 q = torch.tensor([setting], dtype=torch.float, device=self.device)
                 y_strings, y_shapes, t_6 = self.gaussian_model_step(y, y_points, q, gaussian_params)
+                print("Loop {}".format(t_6), flush=True)
+
 
                 # Step 7 (Bitstream Writing)
                 byte_array, t_7 = self.make_bitstream(y_strings, z_strings, y_shapes, z_shapes, points_streams, k, q)
@@ -173,11 +183,11 @@ class CompressionPipeline:
                 compressed_data[i] = byte_array
                 t_6s.append(t_6)
                 t_7s.append(t_7)
-
+            """
 
             result["compressed_data"] = compressed_data
-            result["t_6s"] = t_6s
-            result["t_7s"] = t_7s
+            result["t_6"] = t_6
+            result["t_7"] = t_7
             self.results_queue.put(result)
 
 
@@ -209,8 +219,8 @@ class CompressionPipeline:
         sideinfo["time_measurements"]["factorized_model"] = result["t_3"]
         sideinfo["time_measurements"]["hyper_synthesis"] = result["t_4"]
         sideinfo["time_measurements"]["geometry_compression"] = result["t_5"]
-        sideinfo["time_measurements"]["gaussian_model"] = result["t_6s"]
-        sideinfo["time_measurements"]["bitstream_writing"] = result["t_7s"]
+        sideinfo["time_measurements"]["gaussian_model"] = result["t_6"]
+        sideinfo["time_measurements"]["bitstream_writing"] = result["t_7"]
         num_points = result["pointclouds"].C.shape[0]
         sideinfo["gop_info"] = {}
         sideinfo["gop_info"]["num_points"] = num_points
@@ -220,6 +230,7 @@ class CompressionPipeline:
         t_end = time.time()
         sideinfo["timestamps"]["codec_start"] = t_start
         sideinfo["timestamps"]["codec_end"] = t_end
+        print(t_end - t_start)
         return compressed_data, sideinfo 
 
 
@@ -276,6 +287,32 @@ class CompressionPipeline:
         t1 = time.time()
         t_step = t1 - t0
         return z, t_step
+
+
+    def factorized_model_step_batched(self, z):
+        """ Step 3: Factorized Entropy Model """
+        t0 = time.time()
+
+        z = utils.sort_tensor(z)
+        z_points = utils.get_points_per_batch(z)
+
+        z_points = z.C
+        z_shapes = [z.F.shape[0]]
+        z_feats = z.F.t().unsqueeze(0)
+        
+        z_strings = self.compression_model.entropy_model.entropy_bottleneck.compress(z_feats)
+        z_hat = self.compression_model.entropy_model.entropy_bottleneck.decompress(z_strings, z_shapes)
+
+        z_hat = ME.SparseTensor(
+            coordinates=z.C.clone(),
+            features=z_hat[0].t(),
+            tensor_stride=32,
+            device=self.device
+        )
+
+        t1 = time.time()
+        t_step = t1 - t0
+        return z_hat, z_strings, z_shapes, z_points, t_step
 
 
     def factorized_model_step(self, z):
@@ -352,6 +389,46 @@ class CompressionPipeline:
         t_step = t1 - t0
 
         return y_strings, shapes,t_step
+    
+    
+    
+    def gaussian_model_step_batched(self, y, y_points, settings, gaussian_params):
+        t0 = time.time()
+        
+        y = utils.sort_tensor(y)
+        gaussian_params = gaussian_params.features_at_coordinates(y.C.float())
+        q = torch.tensor(settings, device=self.device)
+
+        #gaussian_params = utils.get_features_per_batch(gaussian_params_feats, y.C)
+        #y_feats = utils.get_features_per_batch(y)
+
+        scales_hat, means_hat = gaussian_params.chunk(2, dim=1)
+        scales_hat = scales_hat.t().unsqueeze(0)
+        means_hat = means_hat.t().unsqueeze(0)
+
+        # batching
+        scales_hat = scales_hat.repeat(2, 1, 1)
+        means_hat = means_hat.repeat(2, 1, 1)
+
+        # Scale NN
+        scale = self.compression_model.entropy_model.scale_nn(q) + self.compression_model.entropy_model.eps
+        scale = scale.unsqueeze(2).repeat(1, 1, means_hat.shape[-1])
+        #scale = scale[0].unsqueeze(-1)
+
+        indexes = self.compression_model.entropy_model.gaussian_conditional.build_indexes(scales_hat * scale)
+        y_strings = self.compression_model.entropy_model.gaussian_conditional.compress(
+                y.F.t().unsqueeze(0).repeat(2, 1, 1) * scale,
+                indexes,
+                means=means_hat * scale
+        )
+
+        shapes = [y.F.shape[0]]
+
+        t1 = time.time()
+        t_step = t1 - t0
+
+        return y_strings, shapes,t_step
+
 
 
     def geometry_compression_step(self, y_points):
@@ -376,6 +453,61 @@ class CompressionPipeline:
         t1 = time.time()
         t_step = t1 - t0
         return point_bitstreams, t_step
+
+    def make_bitstream_batched(self, y_string, z_string, y_shape, z_shape, points_streams, ks, q):
+        """
+        Write the bitstream
+
+        Structure:
+        [ num_frames (32) | q_g (32) | q_g (32) | [frame1] ... frame[N] ]
+
+        Frame:  [ Header (128 bits) | Content (whatever) ]
+            Header: [y_shape (32) | z_shape (32) | len_points (32) | len_y (32) | len_z (32) | k1,k2,k3 (96)] 
+            Content: [ points | z_string | y_string ] 
+        """
+        t0 = time.time()
+
+        stream = BitStream()
+
+        num_frames = len(points_streams)
+        stream.write(num_frames, np.int32)
+        stream.write(q[0], np.float64)
+        stream.write(q[1], np.float64)
+
+        """
+        print("-------------")
+        print("Header:")
+        print("Num Frames: {}".format(num_frames))
+        print("Q: {} {}".format(q[0,0], q[0,1]))
+        print("-------------")
+        """
+
+        stream.write(y_shape[0], np.int32)
+        stream.write(z_shape[0], np.int32)
+        stream.write(len(y_string), np.int32)
+        stream.write(len(z_string[0]), np.int32)
+        stream.write(y_string, bytes)
+        stream.write(z_string[0], bytes)
+
+        for i in range(num_frames):
+            points = points_streams[i]
+
+            stream.write(len(points), np.int32)
+
+            stream.write(ks[0][i], np.int32)
+            stream.write(ks[1][i], np.int32)
+            stream.write(ks[2][i], np.int32)
+
+            # Content
+            stream.write(points, bytes)
+
+        bit_string = stream.__str__()
+        byte_array = bytes(int(bit_string[i:i+8], 2) for i in range(0, len(bit_string), 8))
+
+        t1 = time.time()
+        t_step = t1 - t0
+        return byte_array, t_step
+
 
     def make_bitstream(self, y_strings, z_strings, y_shapes, z_shapes, points_streams, ks, q):
         """

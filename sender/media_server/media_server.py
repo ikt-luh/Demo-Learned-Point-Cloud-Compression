@@ -36,7 +36,7 @@ class StreamingServer:
 
         os.makedirs(self.output_directory, exist_ok=True)
 
-        self.mpd_manager = MPDManager(self.output_directory)
+        self.mpd_manager = MPDManager(self.output_directory, maxSegmentDuration=self.segment_duration)
         self.mpd_manager.setup_adaptation_set()
 
         self.context = zmq.Context()
@@ -126,7 +126,6 @@ class StreamingServer:
         publishing_time_stamp = sum(sideinfo["timestamps"]["capturing"]) / len(sideinfo["timestamps"]["capturing"]) + self.publish_offset
         print(publishing_time_stamp)
         segment_number = math.floor((publishing_time_stamp) / self.segment_duration)
-        #segment_number = math.floor((timestamp) / self.segment_duration)
         sideinfo["ID"] = timestamp
 
         for key in sorted(data):

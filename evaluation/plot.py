@@ -89,10 +89,10 @@ def plot_coding_times(all_data):
             
             # Preprocessing
             data["time_measurements_bitstream_writing"] = data["time_measurements_bitstream_writing"].apply(
-                lambda x: sum(eval(x)) if isinstance(x, str) else sum(x)
+                lambda x: sum(eval(x)) if isinstance(x, str) else x 
             )
             data["time_measurements_gaussian_model"] = data["time_measurements_gaussian_model"].apply(
-                lambda x: sum(eval(x)) if isinstance(x, str) else sum(x)
+                lambda x: sum(eval(x)) if isinstance(x, str) else x
             )
             
             # Compute average encoder times
