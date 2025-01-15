@@ -75,7 +75,7 @@ class MPDParser:
                 segment_template = adaptation_set.find(".//SegmentTemplate", mpd_namespace)
                 if segment_template is not None:
                     adaptation_data["segment_template"] = {
-                        "duration": int(segment_template.get("duration")),
+                        "duration": float(segment_template.get("duration")),
                         "media": segment_template.get("media"),
                         "startNumber": int(segment_template.get("startNumber")),
                         "initialization": segment_template.get("initialization")

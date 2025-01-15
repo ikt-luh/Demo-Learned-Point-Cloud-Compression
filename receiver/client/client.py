@@ -72,6 +72,7 @@ class StreamingClient:
 
 
             segment_duration = self.mpd_parser.get_segment_duration()
+            print(segment_duration, flush=True)
             publish_time = self.mpd_parser.get_publish_time()
 
             if publish_time != self.last_publish_time:
@@ -83,7 +84,7 @@ class StreamingClient:
                     self.download_segment(next_segment_number)
                     self.last_segment_number = next_segment_number
 
-                wake_up_time = (next_segment_number + 1) * segment_duration + self.request_offset
+                wake_up_time = (next_segment_number + 1) * segment_duration - self.request_offset
                 sleep_time = max(0, wake_up_time - time.time())
                 time.sleep(sleep_time)
             else:

@@ -67,13 +67,13 @@ class DecompressionPipeline:
             compressed_data = self.geometry_hyper_queue.get()
 
             # Step 1 (Bitstream Reading)
-            y_strings, z_strings, y_shapes, z_shapes, points_streams, ks, q, t_1 = self.read_bitstream(compressed_data)
+            y_strings, z_strings, y_shapes, z_shapes, points_streams, ks, q, t_1 = self.read_bitstream_batched(compressed_data)
 
             # Step 2 (Geometry Decompression)
             y_points, t_2 = self.geometry_decompression_step(points_streams)
 
             # Step 3 (Factorized Entropy Model)
-            z_hats, t_3 = self.factorized_model_step(z_strings, z_shapes, y_points)
+            z_hats, t_3 = self.factorized_model_step_batched(z_strings, z_shapes, y_points)
 
             result = {
                 "y_strings" : y_strings,
@@ -115,7 +115,8 @@ class DecompressionPipeline:
             gaussian_params = result["gaussian_params"]
 
             # Step 5 (Gaussian Entropy Model)
-            y_hat, t_5 = self.gaussian_model_step(y_strings, y_shapes, y_points, q, gaussian_params)
+            y_hat, t_5 = self.gaussian_model_step_batched(y_strings, y_shapes, y_points, q, gaussian_params)
+            #y_hat, t_5 = self.gaussian_model_step(y_strings, y_shapes, y_points, q, gaussian_params)
 
             result["y_hat"] = y_hat
             result["t_5"] = t_5
@@ -169,6 +170,50 @@ class DecompressionPipeline:
 
         return final_data, sideinfo
 
+    def read_bitstream_batched(self, compressed_data):
+        """ Step 1: Read the bitstream. """
+        t0 = time.time()
+        
+        stream = BitStream()
+        stream.write(compressed_data, bytes)
+
+        y_strings, z_strings = [], []
+        y_shapes, z_shapes = [], []
+        points_streams, ks = [], [[],[],[]]
+
+        # Header
+        num_frames = stream.read(np.int32)
+        q_g = stream.read(np.float64)
+        q_a = stream.read(np.float64)
+        q = torch.tensor([[q_g, q_a]], dtype=torch.float, device=self.device)  # Example
+
+        y_shapes = stream.read(np.int32)
+        z_shapes = stream.read(np.int32)
+
+        y_stream_length = stream.read(np.int32)
+        z_stream_length = stream.read(np.int32)
+
+        y_stream = stream.read(bytes, int(y_stream_length))
+        z_stream = stream.read(bytes, int(z_stream_length))
+        y_strings = [y_stream]
+        z_strings = [z_stream]
+
+        # Frames
+        for i in range(num_frames):
+            # Frame Header
+            point_stream_length = stream.read(np.int32)
+
+            #ks[0].append(int(stream.read(np.int32) * 1.2))
+            ks[0].append(stream.read(np.int32))
+            ks[1].append(stream.read(np.int32))
+            ks[2].append(stream.read(np.int32))
+            
+            # Content
+            points = stream.read(bytes, int(point_stream_length))
+            points_streams.append(points)
+
+        t1 = time.time()
+        return y_strings, z_strings, y_shapes, z_shapes, points_streams, ks, q, t1 - t0
 
     def read_bitstream(self, compressed_data):
         """ Step 1: Read the bitstream. """
@@ -243,6 +288,36 @@ class DecompressionPipeline:
         t1 = time.time()
         return y_points, t1 - t0
 
+    def factorized_model_step_batched(self, z_strings, z_shapes, y_points):
+        """ Step 3: Factorized Entropy Model """
+        t0 = time.time()
+
+        # Get latent coordinates
+        latent_coordinates = ME.SparseTensor(
+            coordinates=y_points.clone(), 
+            features=torch.ones((y_points.shape[0], 1)), 
+            tensor_stride=8,
+            device=self.device
+        )
+        latent_coordinates = self.decompression_model.g_s.down_conv(latent_coordinates)
+        latent_coordinates = self.decompression_model.g_s.down_conv(latent_coordinates)
+
+        z_points = utils.sort_points(latent_coordinates.C)
+
+        z_hat_feat = self.decompression_model.entropy_model.entropy_bottleneck.decompress(z_strings, [z_shapes])
+
+        z_hat = ME.SparseTensor(
+            coordinates=z_points,
+            features=z_hat_feat[0].t(),
+            tensor_stride=32,
+            device=self.device
+        )
+
+        t1 = time.time()
+        t_step = t1 - t0
+        return z_hat, t_step
+
+
     def factorized_model_step(self, z_strings, z_shapes, y_points):
         """ Step 3: Factorized Entropy Model """
         t0 = time.time()
@@ -275,10 +350,10 @@ class DecompressionPipeline:
         t_step = t1 - t0
         return z_hats, t_step
 
-    def hyper_synthesis_step(self, z_hats):
+    def hyper_synthesis_step(self, z_hat):
         """ Step 4: Hyper Synthesis """
         t0 = time.time()
-        z_hat = utils.batch_sparse_tensors(z_hats, tensor_stride=32)
+        #z_hat = utils.batch_sparse_tensors(z_hat, tensor_stride=32)
 
         """
         # Transfer z_hat to CPU
@@ -304,6 +379,50 @@ class DecompressionPipeline:
         t_step = t1 - t0
         return gaussian_params, t1 - t0
 
+    def gaussian_model_step_batched(self, y_strings, y_shapes, y_points, q, gaussian_params):
+        """ Step 5: Gaussian Entropy Model """
+        t0 = time.time()
+
+        y_points = utils.sort_points(y_points.to(self.device))
+        gaussian_params_feats = gaussian_params.features_at_coordinates(y_points.float())
+
+        scales_hat, means_hat = gaussian_params_feats.chunk(2, dim=1)
+        scales_hat = scales_hat.t().unsqueeze(0)
+        means_hat = means_hat.t().unsqueeze(0)
+
+        print(q)
+        # Scale NN
+        print(q.shape)
+        scale = self.decompression_model.entropy_model.scale_nn(q) + self.decompression_model.entropy_model.eps
+        print(scale.shape)
+        scale = scale.unsqueeze(2).repeat(1, 1, means_hat.shape[-1])
+        print(scale.shape)
+        rescale = torch.tensor(1.0) / scale
+
+        indexes = self.decompression_model.entropy_model.gaussian_conditional.build_indexes(scales_hat * scale)
+
+        q_val = self.decompression_model.entropy_model.gaussian_conditional.decompress(y_strings, indexes)
+        q_abs, signs = q_val.abs(), torch.sign(q_val)
+
+        y_q_stdev = self.decompression_model.entropy_model.gaussian_conditional.lower_bound_scale(scales_hat * scale)
+
+        q_offsets = (-1) * self.decompression_model.entropy_model.get_offsets(y_q_stdev,scale)
+        q_offsets[q_abs < 0.0001] = (0)
+
+        y_hat_feat = signs * (q_abs + q_offsets)
+        y_hat_feat = y_hat_feat * rescale + means_hat
+
+        y_hat = ME.SparseTensor(
+            coordinates=y_points,
+            features=y_hat_feat[0].t(),
+            tensor_stride=8,
+            device=self.device
+        )
+
+        t1 = time.time()
+        return y_hat, t1 - t0    
+        
+        
     def gaussian_model_step(self, y_strings, y_shapes, y_points, q, gaussian_params):
         """ Step 5: Gaussian Entropy Model """
         t0 = time.time()
