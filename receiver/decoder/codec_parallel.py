@@ -390,13 +390,9 @@ class DecompressionPipeline:
         scales_hat = scales_hat.t().unsqueeze(0)
         means_hat = means_hat.t().unsqueeze(0)
 
-        print(q)
         # Scale NN
-        print(q.shape)
         scale = self.decompression_model.entropy_model.scale_nn(q) + self.decompression_model.entropy_model.eps
-        print(scale.shape)
-        scale = scale.unsqueeze(2).repeat(1, 1, means_hat.shape[-1])
-        print(scale.shape)
+        scale = scale.unsqueeze(2).repeat(1, 1, scales_hat.shape[-1])
         rescale = torch.tensor(1.0) / scale
 
         indexes = self.decompression_model.entropy_model.gaussian_conditional.build_indexes(scales_hat * scale)
