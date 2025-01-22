@@ -1,14 +1,14 @@
 # Server
 camera: "zed"
 mode: "playback" # "demo", "playback", "recording"
-recording_path: "./evaluation/data/jacket"
-depth_clip: 1.8
-voxel_size: 0.006
+recording_path: "./evaluation/data/title_fig"
+depth_clip: 1.2
+voxel_size: 0.005
 max_points: 40000
 max_queue_size: 100
-target_fps: 5
+target_fps: 6
 segment_duration: 1.0
-publish_offset: 4.0
+publish_offset: 3.0
 encoding_settings:
   - [0.4, 0.4]
   - [1, 1]
@@ -16,7 +16,7 @@ encoding_settings:
 # Client
 decoder_type: "parallel"
 request_offset: 0.3
-playout_offset: 2.0
+playout_offset: 3.0
 init_quality: 2
 
 # ZMQ

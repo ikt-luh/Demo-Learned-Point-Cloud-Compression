@@ -163,9 +163,11 @@ class CompressionPipeline:
             compressed_data = {}
             y_strings, y_shapes, t_6 = self.gaussian_model_step_batched(y, y_points, self.settings, gaussian_params)
                 
+            t_7s = []
             for i, q in enumerate(self.settings):
                 byte_array, t_7 = self.make_bitstream_batched(y_strings[i], z_strings, y_shapes, z_shapes, points_streams, k, q)
                 compressed_data[i] = byte_array
+                t_7s.append(t_7)
 
             print("Batched {}".format(t_6), flush=True)
             """
@@ -187,7 +189,7 @@ class CompressionPipeline:
 
             result["compressed_data"] = compressed_data
             result["t_6"] = t_6
-            result["t_7"] = t_7
+            result["t_7"] = t_7s
             self.results_queue.put(result)
 
 
@@ -395,29 +397,34 @@ class CompressionPipeline:
     def gaussian_model_step_batched(self, y, y_points, settings, gaussian_params):
         t0 = time.time()
         
-        y = utils.sort_tensor(y)
-        gaussian_params = gaussian_params.features_at_coordinates(y.C.float())
+        y_points = utils.sort_points(y.C)
+        gaussian_param = gaussian_params.features_at_coordinates(y_points.float())
         q = torch.tensor(settings, device=self.device)
 
         #gaussian_params = utils.get_features_per_batch(gaussian_params_feats, y.C)
         #y_feats = utils.get_features_per_batch(y)
 
-        scales_hat, means_hat = gaussian_params.chunk(2, dim=1)
+        scales_hat, means_hat = gaussian_param.chunk(2, dim=1)
         scales_hat = scales_hat.t().unsqueeze(0)
         means_hat = means_hat.t().unsqueeze(0)
 
         # batching
-        scales_hat = scales_hat.repeat(2, 1, 1)
-        means_hat = means_hat.repeat(2, 1, 1)
+        scales_hat = scales_hat.repeat(q.shape[0], 1, 1)
+        means_hat = means_hat.repeat(q.shape[0], 1, 1)
 
-        # Scale NN
-        scale = self.compression_model.entropy_model.scale_nn(q) + self.compression_model.entropy_model.eps
-        scale = scale.unsqueeze(2).repeat(1, 1, means_hat.shape[-1])
-        #scale = scale[0].unsqueeze(-1)
+        # Scale NN (Required in a loop because of strange non-determinism)
+        scales = []
+        for i in range(q.shape[0]):
+            scale = self.compression_model.entropy_model.scale_nn(q[i].unsqueeze(0)) + self.compression_model.entropy_model.eps
+            scales.append(scale.unsqueeze(2))
+        
+        scale = torch.cat(scales, dim=0).repeat(1, 1, scales_hat.shape[-1])
+
+        #scale = scale.unsqueeze(2).repeat(1, 1, scales_hat.shape[-1])
 
         indexes = self.compression_model.entropy_model.gaussian_conditional.build_indexes(scales_hat * scale)
         y_strings = self.compression_model.entropy_model.gaussian_conditional.compress(
-                y.F.t().unsqueeze(0).repeat(2, 1, 1) * scale,
+                y.F.t().unsqueeze(0).repeat(q.shape[0], 1, 1) * scale,
                 indexes,
                 means=means_hat * scale
         )
@@ -471,6 +478,7 @@ class CompressionPipeline:
 
         num_frames = len(points_streams)
         stream.write(num_frames, np.int32)
+        print(q)
         stream.write(q[0], np.float64)
         stream.write(q[1], np.float64)
 
