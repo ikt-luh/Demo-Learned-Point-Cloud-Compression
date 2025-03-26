@@ -82,7 +82,6 @@ class Encoder:
     def process(self, batch):
         # Sampling
         gop = self.sample(batch)
-        print("NUM FRAMES: {}".format(len(gop["frames"])), flush=True)
 
         # Compression
         compressed_data = self.compress_batch(gop)
@@ -134,7 +133,6 @@ class Encoder:
         Mock compression function. Currently, just returns the input.
         """
         data = {}
-        #data["timestamp"] = sampled_batch[0]["timestamp"]
         gop["segment_duration"] = self.segment_duration
         gop["frame_rate"] = self.target_fps
 

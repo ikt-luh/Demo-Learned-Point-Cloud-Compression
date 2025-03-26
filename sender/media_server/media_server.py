@@ -122,14 +122,14 @@ class StreamingServer:
         """
         sideinfo = segment.pop("sideinfo", None)
         data = segment.pop("compressed_data", None)
+        print("Received data")
 
         publishing_time_stamp = sum(sideinfo["timestamps"]["capturing"]) / len(sideinfo["timestamps"]["capturing"]) + self.publish_offset
-        print(publishing_time_stamp)
         segment_number = math.floor((publishing_time_stamp) / self.segment_duration)
         sideinfo["ID"] = timestamp
 
         for key in sorted(data):
-            item = data[key]
+            item = (data[key], sideinfo)
             segment_folder = os.path.join(self.output_directory, f"ID{key}")
             segment_path = os.path.join(segment_folder, f"segment-{segment_number:015d}.bin")
             tmp_segment_path = os.path.join(segment_folder, f"segment-{segment_number:015d}_tmp.bin")

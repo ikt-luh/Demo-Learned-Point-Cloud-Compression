@@ -208,21 +208,21 @@ class CompressionPipeline:
         pointclouds, sideinfo = self.unpack_batch(data)
 
         self.analysis_queue.put(pointclouds)
-        
+
         result = self.results_queue.get()
 
         # Append Compressed data
         for key, item in result["compressed_data"].items():
             compressed_data[key+1] = item
 
-        sideinfo["time_measurements"] = {}
-        sideinfo["time_measurements"]["analysis"] = result["t_1"]
-        sideinfo["time_measurements"]["hyper_analysis"] = result["t_2"]
-        sideinfo["time_measurements"]["factorized_model"] = result["t_3"]
-        sideinfo["time_measurements"]["hyper_synthesis"] = result["t_4"]
-        sideinfo["time_measurements"]["geometry_compression"] = result["t_5"]
-        sideinfo["time_measurements"]["gaussian_model"] = result["t_6"]
-        sideinfo["time_measurements"]["bitstream_writing"] = result["t_7"]
+        sideinfo["enc_time_measurements"] = {}
+        sideinfo["enc_time_measurements"]["analysis"] = result["t_1"]
+        sideinfo["enc_time_measurements"]["hyper_analysis"] = result["t_2"]
+        sideinfo["enc_time_measurements"]["factorized_model"] = result["t_3"]
+        sideinfo["enc_time_measurements"]["hyper_synthesis"] = result["t_4"]
+        sideinfo["enc_time_measurements"]["geometry_compression"] = result["t_5"]
+        sideinfo["enc_time_measurements"]["gaussian_model"] = result["t_6"]
+        sideinfo["enc_time_measurements"]["bitstream_writing"] = result["t_7"]
         num_points = result["pointclouds"].C.shape[0]
         sideinfo["gop_info"] = {}
         sideinfo["gop_info"]["num_points"] = num_points
