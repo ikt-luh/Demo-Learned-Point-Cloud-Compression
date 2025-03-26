@@ -3,7 +3,6 @@
 ## Hardware
 This demo requires the following Hardware:
 - 2 Jetson AGX Orin developer kits
-- 1 Occulus Quest 2 VR Headset + Link Cable
 - 1 ZED2i Stereo Camera 
 
 Cables and peripherals.
