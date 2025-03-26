@@ -21,6 +21,9 @@ class MPDParser:
     def get_codec_info(self, quality):
         return self.mpd_data['periods'][0]["adaptation_sets"][0]["representations"][quality]["codecs"]
 
+    def get_bandwidth(self, quality):
+        return self.mpd_data['periods'][0]["adaptation_sets"][0]["representations"][quality]["bandwidth"]
+
     def update_mpd(self):
         for attempt in range(3):  # Try 3 times
             try:

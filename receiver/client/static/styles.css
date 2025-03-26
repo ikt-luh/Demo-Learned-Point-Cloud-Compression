@@ -1,0 +1,44 @@
+#qualitySelector {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-family: Arial, sans-serif;
+}
+
+.quality-button {
+    padding: 10px 20px;
+    border: 2px solid #007BFF;
+    border-radius: 8px;
+    background-color: white;
+    color: #007BFF;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+.quality-button.active {
+    background-color: #007BFF;
+    color: white;
+}
+
+.quality-button:hover {
+    background-color: #0056b3;
+    color: white;
+}
+
+
+/* Container for the two latency charts */
+#latencyChartsContainer {
+    display: flex;
+    justify-content: space-between; /* Space between the two charts */
+    gap: 20px; /* Add some gap between the charts */
+    width: 100%; /* Ensure it uses the full width of its container */
+    padding: 0 10px; /* Add some padding to the left and right */
+    box-sizing: border-box; /* Prevent overflow */
+}
+
+/* Each chart should take up equal width */
+#encLatencyChart, #decLatencyChart {
+    flex: 1; /* Each canvas takes equal space */
+    max-width: 48%; /* Ensures the charts don't exceed the container width */
+    height: 100%; /* Adjust height as needed */
+}

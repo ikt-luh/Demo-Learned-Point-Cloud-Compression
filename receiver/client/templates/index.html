@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Streaming Client Configuration</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.socket.io/4.5.1/socket.io.min.js"></script>
+    <link rel="stylesheet" href="static/styles.css">
+</head>
+<body>
+    <h2>Quality selection</h2>
+    <div id="qualitySelector">
+        <div>
+            <button id="quality0" class="quality-button" data-quality="0">Uncompressed</button>
+            <button id="quality1" class="quality-button" data-quality="1">Geo: 1 Att: 0</button>
+            <button id="quality2" class="quality-button" data-quality="2">Geo: 0 Att: 1</button>
+            <button id="quality3" class="quality-button" data-quality="3">Geo: 1 Att: 1</button>
+        </div>
+    </div>
+
+    <h2>Bandwidth</h2>
+    <canvas id="bandwidthChart" width="400" height="100"></canvas>
+
+    <h2>Num. Points</h2>
+    <canvas id="pointsChart" width="400" height="100"></canvas>
+
+    <h2>Latencies</h2>
+    <div id="latencyChartsContainer">
+        <canvas id="encLatencyChart" width="400" height="200"></canvas>
+        <canvas id="decLatencyChart" width="400" height="200"></canvas>
+    </div>
+
+    <script src="static/qualitySelector.js"></script>
+    <script src="static/charts.js"></script>
+    <script src="static/socket.js"></script>
+
+</body>
+</html>
