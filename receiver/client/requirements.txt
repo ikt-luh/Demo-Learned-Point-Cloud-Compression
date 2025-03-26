@@ -4,3 +4,4 @@ requests
 numpy==1.26.4
 pyyaml
 flask
+Flask-SocketIO

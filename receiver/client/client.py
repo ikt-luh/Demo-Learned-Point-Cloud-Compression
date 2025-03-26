@@ -40,6 +40,12 @@ class StreamingClient:
         self.last_publish_time = None
         self.server_active = False
 
+        # GUI Info
+        self.current_bandwidth = 0
+        self.current_latencies = {
+            "e1": 0, "e2": 0, "e3": 0, "e4": 0, "e5": 0, "e6": 0, "e7": 0,
+        }
+
         # Buffers
         self.playout_buffer = Queue()
         self.playout_time_buffer = Queue()
@@ -70,9 +76,7 @@ class StreamingClient:
             while not self.mpd_parser.update_mpd():
                 print("Waiting for MPD to become available", flush=True)
 
-
             segment_duration = self.mpd_parser.get_segment_duration()
-            print(segment_duration, flush=True)
             publish_time = self.mpd_parser.get_publish_time()
 
             if publish_time != self.last_publish_time:
@@ -98,15 +102,17 @@ class StreamingClient:
 
         data = self.segment_downloader.download_segment(base_url, media_template, next_segment_number)
         codec_info = self.mpd_parser.get_codec_info(self.segment_downloader.current_quality)
-
-        sideinfo = {"timestamps": {}}
-        sideinfo["ID"] = next_segment_number
-        sideinfo["quality"] = self.segment_downloader.current_quality
-        sideinfo["codec_info"] = codec_info
-        sideinfo["timestamps"]["client_received"] = time.time()
+        bandwidth = self.mpd_parser.get_bandwidth(self.segment_downloader.current_quality)
 
         if data:
-            segment = {"data": data, "sideinfo": sideinfo}
+            (data, sideinfo) = pickle.loads(data)
+            sideinfo["ID"] = next_segment_number
+            sideinfo["quality"] = self.segment_downloader.current_quality
+            sideinfo["codec_info"] = codec_info
+            sideinfo["timestamps"]["client_received"] = time.time()
+
+            segment = {"data": pickle.dumps(data), "sideinfo": sideinfo}
+
             self.downloaded_segments.put(next_segment_number)
             self.decoder_push_socket.send(pickle.dumps(segment))
 
@@ -128,6 +134,7 @@ class StreamingClient:
             sideinfo["timestamps"]["playout"] = []
 
             num_frames = len(data)
+            points_per_segment = 0
             for i, frame in enumerate(data):
                 points = frame["points"] + 100
                 colors = 255 * frame["colors"]
@@ -143,10 +150,32 @@ class StreamingClient:
                 self.playout_time_buffer.put(next_playout_time)
 
                 sideinfo["timestamps"]["playout"].append(next_playout_time)
+                points_per_segment += points.shape[0]
 
             if self.csv_file is None:
                 self.csv_file = "./evaluation/logs/receiver/{:015d}.csv".format(math.floor(time.time()))
 
+            # GUI updates
+            print(yaml.dump(sideinfo, default_flow_style=False))
+            quality = sideinfo["quality"]
+            self.current_bandwidth = sideinfo["gop_info"]["bandwidth"][quality] / 1000
+            self.current_latencies = {
+                "e1": sideinfo["enc_time_measurements"]["analysis"],
+                "e2": sideinfo["enc_time_measurements"]["hyper_analysis"],
+                "e3": sideinfo["enc_time_measurements"]["factorized_model"],
+                "e4": sideinfo["enc_time_measurements"]["hyper_synthesis"],
+                "e5": sideinfo["enc_time_measurements"]["gaussian_model"],
+                "e6": sideinfo["enc_time_measurements"]["geometry_compression"],
+                "e7": sum(sideinfo["enc_time_measurements"]["bitstream_writing"]),
+                "d1": sideinfo["time_measurements"]["bitstream_reading"],
+                "d2": sideinfo["time_measurements"]["geometry_decompression"],
+                "d3": sideinfo["time_measurements"]["factorized_model"],
+                "d4": sideinfo["time_measurements"]["hyper_synthesis"],
+                "d5": sideinfo["time_measurements"]["guassian_model"],
+                "d6": sideinfo["time_measurements"]["synthesis_transform"],
+            }
+
+            # Logs
             process_logs_and_save(sideinfo, self.csv_file)
 
 
@@ -186,11 +215,17 @@ class StreamingClient:
         threading.Thread(target=self.visualizer_sender, daemon=True).start()
         
         # GUI
-        gui = create_flask_app(self)
+        gui, socket = create_flask_app(self)
         threading.Thread(target=lambda: gui.run(host="0.0.0.0", port=5000), daemon=True).start()
 
         while True:
             time.sleep(1)
+    
+    def get_bandwidth(self):
+        return self.current_bandwidth
+
+    def get_latencies(self):
+        return self.current_latencies
 
 if __name__ == "__main__":
     client = StreamingClient("./shared/config.yaml")
