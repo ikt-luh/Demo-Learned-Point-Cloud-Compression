@@ -42,6 +42,7 @@ class StreamingClient:
 
         # GUI Info
         self.current_bandwidth = 0
+        self.current_num_points = 0
         self.current_latencies = {
             "e1": 0, "e2": 0, "e3": 0, "e4": 0, "e5": 0, "e6": 0, "e7": 0,
         }
@@ -79,8 +80,8 @@ class StreamingClient:
             segment_duration = self.mpd_parser.get_segment_duration()
             publish_time = self.mpd_parser.get_publish_time()
 
+            timestamp = time.time()
             if publish_time != self.last_publish_time:
-                timestamp = time.time()
                 self.last_publish_time = publish_time
                 next_segment_number = math.floor(timestamp  / segment_duration)
 
@@ -92,7 +93,7 @@ class StreamingClient:
                 sleep_time = max(0, wake_up_time - time.time())
                 time.sleep(sleep_time)
             else:
-                time.sleep(0.1)
+                time.sleep(0.3)
             
 
     def download_segment(self, next_segment_number):
@@ -156,9 +157,9 @@ class StreamingClient:
                 self.csv_file = "./evaluation/logs/receiver/{:015d}.csv".format(math.floor(time.time()))
 
             # GUI updates
-            print(yaml.dump(sideinfo, default_flow_style=False))
             quality = sideinfo["quality"]
             self.current_bandwidth = sideinfo["gop_info"]["bandwidth"][quality] / 1000
+            self.current_num_points = points_per_segment
             self.current_latencies = {
                 "e1": sideinfo["enc_time_measurements"]["analysis"],
                 "e2": sideinfo["enc_time_measurements"]["hyper_analysis"],
@@ -226,6 +227,9 @@ class StreamingClient:
 
     def get_latencies(self):
         return self.current_latencies
+
+    def get_num_points(self):
+        return self.current_num_points
 
 if __name__ == "__main__":
     client = StreamingClient("./shared/config.yaml")
