@@ -1,5 +1,7 @@
 # Demo for Unified Compression
 
+This repository contains the demo for the paper [Learned Compression in Adaptive Point Cloud Streaming](https://dl.acm.org/doi/10.1145/3712676.3719266).
+
 ## Hardware
 This demo requires the following Hardware:
 - 2 Jetson AGX Orin developer kits
@@ -23,7 +25,9 @@ The project is structured as follows
     |	├── visualization             
     |	└── docker-compose.yaml
     ├── shared                   # Shared modules
+    ├── evaluation               # Plot generation and logs
     ├── dependencies             # Dependencies
+    ├── tests             	 # Test scripts for development
     ├── LICENSE
     └── README.md
 ```
@@ -33,7 +37,7 @@ The project is structured as follows
 For setup, collect the required dependencies:
 ```
 	mkdir dependencies && cd dependencies
-	git clone --branch unified_demo git@gitlab.uni-hannover.de:ve-intern/research/unified-compression.git
+	git clone --branch unified_demo https://github.com/ikt-luh/Unified-Point-Cloud-Compression.git
 ```
 
 
@@ -44,7 +48,6 @@ First, we need to open the port for the media server:
 sudo iptables -A INPUT -p tcp --dport 4000 -j ACCEPT
 ```
 
-
 On the sender device, make sure a ZED Camera is plugged in, then run
 ```
 cd sender
@@ -52,47 +55,22 @@ docker-compose up --build
 ```
 
 ### Receiver 
-On the receiver side, we need to connect the Occulus Quest 2 before running:
 
-First, check if the headset is accesible via adb:
-```
-adb devices
-```
 
-If it is, use reverse port forwarding to make the browser accesible
-```
-adb reverse tcp:5173 tcp:5173
-adb reverse tcp:8765 tcp:8765
-adb reverse tcp:8765 tcp:8765
-```
-
-Finally, starting the server:
+Starting the server:
 ```
 cd receiver
 docker-compose up --build
 ```
 
 
-The visualization should now be available via https://localhost:5173/ on the receiver device **and** via the Occulus Headset 
-
-## Usage
-### Rendering 
-
-Current rendering is setup via
-
-Build:
-```
-docker build -t threejs-app src/rendering/
-```
-
-Run:
-```
-docker run -p 5173:5173 -v $(pwd)/src/rendering:/app/src/rendering threejs-app
-```
+The visualization should now be available via https://localhost:5173/ on the receiver device.
+Furthermore, the Dashboard is available via https://localhost:5000/ 
 
 ### Running the VR headset
 
-For running the Occulus Quest 2 VR headset, we use adb.
+For running the Occulus Quest 2 VR headset, you can use ADB. 
+This is experimental to state.
 
 On the receiver device, run
 ```
@@ -156,4 +134,19 @@ sudo pip3 install -U jetson-stats
 and run with
 ```
 jtop
+```
+
+### Citation
+If you find this work helpfull, consider citing:
+```
+@inproceedings{10.1145/3712676.3719266,
+	author = {Rudolph, Michael and Rizk, Amr},
+	title = {Learned Compression in Adaptive Point Cloud Streaming: Opportunities, Challenges and Limitations},
+	year = {2025},
+	doi = {10.1145/3712676.3719266},
+	booktitle = {Proceedings of the 16th ACM Multimedia Systems Conference},
+	pages = {328–334},
+	numpages = {7},
+	series = {MMSys '25}
+}
 ```
