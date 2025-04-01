@@ -36,8 +36,8 @@ The project is structured as follows
 
 For setup, collect the required dependencies:
 ```
-	mkdir dependencies && cd dependencies
-	git clone --branch unified_demo https://github.com/ikt-luh/Unified-Point-Cloud-Compression.git
+mkdir dependencies && cd dependencies
+git clone --branch unified_demo https://github.com/ikt-luh/Unified-Point-Cloud-Compression.git
 ```
 
 
@@ -69,16 +69,15 @@ Furthermore, the Dashboard is available via https://localhost:5000/
 
 ### Running the VR headset
 
-For running the Occulus Quest 2 VR headset, you can use ADB. 
-This is experimental to state.
+For running the Occulus Quest 2 VR headset, you can use ADB. The implementation for this is currently under development and will be available in the coming weeks.
 
 On the receiver device, run
 ```
-    sudo apt-get install android-tools-adb
+sudo apt-get install android-tools-adb
 ```
 You will have to update udev rules for the headset. For this, run 
 ```
-    lsusb
+lsusb
 ```
 and get the ID of the Oculus VR, Inc. Quest 2 headset. This should look like "AAAA:BBBB".
 Then, add the following line to /etc/udev/rules.d/51-android.rules (Replacing AAAA and BBBB with the Device ID from lsusb)
